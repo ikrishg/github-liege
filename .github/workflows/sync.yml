@@ -1,0 +1,484 @@
+name: Sync
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  find-repos:
+    runs-on: ubuntu-latest
+
+    outputs:
+      repos: ${{ steps.find-repos.outputs.result }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Find All Repositories
+        uses: actions/github-script@v7
+        id: find-repos
+        with:
+          script: |
+            console.log(`Finding all repositories for ${context.repo.owner}`)
+
+            const data = await github.paginate(
+              github.rest.repos.listForUser,
+              { username: context.repo.owner }
+            )
+
+            console.log(`Found ${data.length} repositories for ${context.repo.owner}`)
+            console.log(`Repositories: ${data.map(repo => repo.name).join(', ')}`)
+
+            const repos = data.map(repo => {
+              return {
+                owner: repo.owner.login,
+                repo: repo.name,
+              }
+            });
+
+            console.log(`Passing ${repos.length} repositories to next jobs`)
+
+            return repos
+
+  sync-labels:
+    needs: find-repos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Find Outdated Labels
+        id: find-outdated-labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}
+
+            console.log(`Finding outdated labels for ${repos.length} repositories`)
+
+            const { labels: expectedLabels } = require('${{ github.workspace}}/settings/labels.json')
+
+            console.log(`Found ${expectedLabels.length} expected labels from ${{ github.workspace}}/settings/labels.json`)
+
+            const result = []
+
+            for (const repo of repos) {
+              console.log(`Finding labels for ${repo.owner}/${repo.repo}`)
+
+              const labels = await github.paginate(
+                github.rest.issues.listLabelsForRepo,
+                { ...repo }
+              )
+
+              console.log(`Found ${labels.length} labels for ${repo.owner}/${repo.repo}`)
+
+              const labelsToDelete = labels.filter(label => {
+                return !expectedLabels.find(expectedLabel => {
+                  return expectedLabel.name === label.name
+                })
+              })
+
+              console.log(`Found ${labelsToDelete.length} labels to delete for ${repo.owner}/${repo.repo}`)
+
+              const labelsToCreate = expectedLabels.filter(expectedLabel => {
+                return !labels.find(label => {
+                  return expectedLabel.name === label.name
+                })
+              })
+
+              console.log(`Found ${labelsToCreate.length} labels to create for ${repo.owner}/${repo.repo}`)
+
+              const labelsToUpdate = expectedLabels.filter(expectedLabel => {
+                return labels.find(label => {
+                  return expectedLabel.name === label.name && expectedLabel.color.replace('#', '') !== label.color || expectedLabel.description !== label.description
+                })
+              })
+
+              console.log(`Found ${labelsToUpdate.length} labels to update for ${repo.owner}/${repo.repo}`)
+
+              result.push({
+                repo,
+                labelsToDelete,
+                labelsToCreate,
+                labelsToUpdate
+              })
+            }
+
+            console.log(`Found ${result.length} repositories with outdated labels`)
+
+            return result
+
+      - name: Update Labels
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ steps.find-outdated-labels.outputs.result }}
+
+            console.log(`Updating labels for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Updating labels for ${repo.owner}/${repo.repo}`)
+
+              for (const label of repo.labelsToDelete) {
+                await github.rest.issues.deleteLabel({
+                  ...repo.repo,
+                  name: label.name
+                })
+
+                console.log(`Deleted label ${label.name} from ${repo.owner}/${repo.repo}`)
+              }
+
+              for (const label of repo.labelsToCreate) {
+                await github.rest.issues.createLabel({
+                  ...repo.repo,
+                  ...label,
+                  color: label.color.replace('#', '')
+                })
+
+                console.log(`Created label ${label.name} in ${repo.owner}/${repo.repo}`)
+              }
+
+              for (const label of repo.labelsToUpdate) {
+                await github.rest.issues.updateLabel({
+                  ...repo.repo,
+                  ...label,
+                  color: label.color.replace('#', '')
+                })
+
+                console.log(`Updated label ${label.name} in ${repo.owner}/${repo.repo}`)
+              }
+            }
+
+
+  disable-projects-if-unused:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Find Projects to Disable
+        id: find-projects-to-disable
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.has_projects)
+
+            console.log(`Finding projects for ${repos.length} repositories`)
+
+            const result = []
+
+            for (const repo of repos) {
+              const projects = await github.paginate(
+                github.rest.projects.listForRepo,
+                { ...repo }
+              )
+
+              console.log(`Found ${projects.length} projects for ${repo.owner}/${repo.repo}`)
+
+              if (projects.length === 0) {
+                result.push(repo)
+              }
+            }
+      - name: Disable Projects
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ steps.find-projects-to-disable.outputs.result }}
+
+            console.log(`Disabling projects for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Disabling projects for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                has_projects: false
+              })
+
+              console.log(`Disabled projects for ${repo.owner}/${repo.repo}`)
+            }
+
+  disable-wiki-if-unused:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Find Wikis to Disable
+        id: find-wikis-to-disable
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}
+
+            console.log(`Finding wikis for ${repos.length} repositories`)
+
+            fs.mkdirSync('tmp')
+
+            const result = []
+
+            for (const repo of repos) {
+              console.log(`Finding wiki for ${repo.owner}/${repo.repo}`)
+
+              console.log(`Cloning wiki for ${repo.owner}/${repo.repo}`)
+
+              await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}.wiki.git`, `tmp/${repo.owner}-${repo.repo}-wiki`])
+
+              console.log(`Cloned wiki for ${repo.owner}/${repo.repo}`)
+
+              console.log(`Finding pages for ${repo.owner}/${repo.repo}`)
+
+              const pages = fs.readdirSync(`tmp/${repo.owner}-${repo.repo}-wiki`)
+
+              console.log(`Found ${pages.length} pages for ${repo.owner}/${repo.repo}`)
+
+              if (pages.length === 0) {
+                result.push(repo)
+              }
+            }
+
+            return result
+
+      - name: Disable Wikis
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ steps.find-wikis-to-disable.outputs.result }}
+
+            console.log(`Disabling wikis for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Disabling wiki for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                has_wiki: false
+              })
+
+              console.log(`Disabled wiki for ${repo.owner}/${repo.repo}`)
+            }
+
+  allow-squash-merge:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Allow Squash Merge
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }},filter(repo => repo.allow_squash_merge === false)
+
+            console.log(`Allowing squash merge for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Allowing squash merge for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                allow_squash_merge: true
+              })
+
+              console.log(`Allowed squash merge for ${repo.owner}/${repo.repo}`)
+            }
+
+  allow-rebase-merge:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Allow Rebase Merge
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.allow_rebase_merge === false)
+
+            console.log(`Allowing rebase merge for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Allowing rebase merge for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                allow_rebase_merge: true
+              })
+
+              console.log(`Allowed rebase merge for ${repo.owner}/${repo.repo}`)
+            }
+
+  disallow-merge-commit:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Disallow Merge Commit
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.allow_merge_commit === true)
+
+            console.log(`Disallowed merge commit for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Disallowed merge commit for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                allow_merge_commit: false
+              })
+
+              console.log(`Disallowed merge commit for ${repo.owner}/${repo.repo}`)
+            }
+
+  disallow-automerge:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Disallow Automerge
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.automerge_enabled === true)
+
+            console.log(`Disallowed automerge for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Disallowed automerge for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                automerge_enabled: false
+              })
+
+              console.log(`Disallowed automerge for ${repo.owner}/${repo.repo}`)
+            }
+
+  delete-branch-on-merge:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Delete Branch on Merge
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.delete_branch_on_merge === false)
+
+            console.log(`Deleting branch on merge for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Deleting branch on merge for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                delete_branch_on_merge: true
+              })
+
+              console.log(`Deleted branch on merge for ${repo.owner}/${repo.repo}`)
+            }
+
+  require-web-commit-signature:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Require Web Commit Signature
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.require_commit_signatures === false)
+
+            console.log(`Requiring web commit signature for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              console.log(`Requiring web commit signature for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.update({
+                ...repo,
+                require_commit_signatures: true
+              })
+
+              console.log(`Required web commit signature for ${repo.owner}/${repo.repo}`)
+            }
+
+  sync-rulesets:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Sync Rulesets
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}
+
+            console.log(`Syncing rulesets for ${repos.length} repositories`)
+
+            for (const repo of repos) {
+              const rulesets = await github.rest.repos.getRepoRulesets({
+                ...repo
+              })
+
+              if (rulesets.length !== 0) {
+                continue
+              }
+
+              console.log(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
+
+              await github.rest.repos.createRepoRuleset({
+                ...repo,
+                name: 'Default',
+                target: 'main',
+                enforcement: 'enabled',
+                rules: [
+                  {
+                    type: 'required_linear_history'
+                  },
+                  {
+                    type: 'pull_request',
+                    parameters: {
+                      require_code_owner_review: true,
+                      required_approving_review_count: 1,
+                      required_review_thread_resolution: true
+                    }
+                  },
+                  {
+                    type: 'commit_message_pattern',
+                    parameters: {
+                      // Pattern to match: <type>(<scope>): <subject>
+                      pattern: '^([a-z]+)(\(([a-z\\-]+\)))?: .{1,50}$',
+                      operator: 'regex'
+                    }
+                  }
+                ]
+              })
+            }

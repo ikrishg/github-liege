@@ -1,0 +1,159 @@
+{
+  "labels": [
+    {
+      "name": "🟥 priority: critical",
+      "description": "Must be fixed ASAP",
+      "color": "#b60205"
+    },
+    {
+      "name": "🟧 priority: high",
+      "description": "Stalls work on the project or its dependents",
+      "color": "#ff9f1c"
+    },
+    {
+      "name": "🟨 priority: medium",
+      "description": "Not blocking but should be fixed soon",
+      "color": "#ffcc00"
+    },
+    {
+      "name": "🟩 priority: low",
+      "description": "Low priority and doesn't need to be rushed",
+      "color": "#cfda2c"
+    },
+    {
+      "name": "🟪 priority: none",
+      "description": "No priority, should only be performed when a developer is available",
+      "color": "#008672"
+    },
+    {
+      "name": "🏁 status: ready for dev",
+      "description": "Ready for work",
+      "color": "#cccccc"
+    },
+    {
+      "name": "🚧 status: blocked",
+      "description": "Blocked and therefore not ready for work",
+      "color": "#999999"
+    },
+    {
+      "name": "🧹 status: ticket work required",
+      "description": "Needs more details before it can be worked on",
+      "color": "#666666"
+    },
+    {
+      "name": "🏷 status: label work required",
+      "description": "Needs proper labelling before it can be worked on",
+      "color": "#666666"
+    },
+    {
+      "name": "⛔️ status: discarded",
+      "description": "Will not be worked on",
+      "color": "#eeeeee"
+    },
+    {
+      "name": "🚦 status: awaiting triage",
+      "description": "Has not been triaged & therefore, not ready for work",
+      "color": "#333333"
+    },
+    {
+      "name": "⭐ goal: addition",
+      "description": "Addition/Improvement of feature",
+      "color": "#ffffff"
+    },
+    {
+      "name": "🛠 goal: fix",
+      "description": "Bug fix",
+      "color": "#ffffff"
+    },
+    {
+      "name": "📝 aspect: text",
+      "description": "Concerns the documentation material in the repository",
+      "color": "#04338c"
+    },
+    {
+      "name": "💻 aspect: code",
+      "description": "Concerns the software code in the repository",
+      "color": "#04338c"
+    },
+    {
+      "name": "🔍 pull: ready for review",
+      "description": "PR is ready for maintainer review.",
+      "color": "#33dd33"
+    },
+    {
+      "name": "⚠️ pull: merge conflict",
+      "description": "PR has conflicts and requires a rebase.",
+      "color": "#dddd33"
+    },
+    {
+      "name": "⏫ pull: requires update",
+      "description": "PR has requested changes that still need to be applied.",
+      "color": "#dd3333"
+    },
+    {
+      "name": "⚒️ pull: work in progress",
+      "description": "PR is still being worked on and is not ready for review.",
+      "color": "#dddd33"
+    },
+    {
+      "name": "🟩 pull: small",
+      "description": "PR is small and easy to review",
+      "color": "#76dbbe"
+    },
+    {
+      "name": "🟨 pull: medium",
+      "description": "PR is medium sized and requires some effort to review",
+      "color": "#2986cc"
+    },
+    {
+      "name": "🟧 pull: large",
+      "description": "PR is large and requires a lot of effort to review",
+      "color": "#ff9f1c"
+    },
+    {
+      "name": "🟢 first contribution",
+      "description": "PR is the first contribution of the contributor",
+      "color": "#7f0799"
+    },
+    {
+      "name": "good first issue",
+      "description": "New-contributor friendly",
+      "color": "#7f0799"
+    },
+    {
+      "name": "EddieHub:good-first-issue",
+      "description": "Good first issue for EddieHubCommunity/good-first-issue-finder",
+      "color": "#7f0799"
+    },
+    {
+      "name": "help wanted",
+      "description": "Open to participation from the community",
+      "color": "#7f0799"
+    },
+    {
+      "name": "dependencies",
+      "description": "This PR changes dependencies",
+      "color": "#3333dd"
+    },
+    {
+      "name": "invalid",
+      "description": "This PR is invalid",
+      "color": "#dd3333"
+    },
+    {
+      "name": "wontfix",
+      "description": "This Issue will not be fixed",
+      "color": "#dd3333"
+    },
+    {
+      "name": "duplicate",
+      "description": "This Issue is a duplicate",
+      "color": "#dd3333"
+    },
+    {
+      "name": "hacktoberfest",
+      "description": "Hacktoberfest Open Issues",
+      "color": "#7f0799"
+    }
+  ]
+}
