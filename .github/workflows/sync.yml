@@ -2,9 +2,9 @@ name: Sync
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -146,7 +146,6 @@ jobs:
               }
             }
 
-
   disable-projects-if-unused:
     needs: find-repos
     runs-on: ubuntu-latest
@@ -285,7 +284,7 @@ jobs:
       - name: Sync Rulesets
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
-          SKIP_REPOS: ''
+          SKIP_REPOS: ""
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -334,4 +333,70 @@ jobs:
               }
 
               console.log(`Synced rulesets for ${repo.owner}/${repo.repo}`)
+            }
+
+  sync-webhooks:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Sync Webhooks
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}
+            const expectedWebhooks = require('${{ github.workspace}}/settings/webhooks.js')
+            const result = []
+            for (const repo of repos) {
+              console.log(`Finding webhooks for ${repo.owner}/${repo.repo}`)
+              const webhooks = await github.paginate(
+                github.rest.repos.listWebhooks,
+                { ...repo }
+              )
+              console.log(`Found ${webhooks.length} webhooks for ${repo.owner}/${repo.repo}`)
+
+              const webhooksToCreate = expectedWebhooks.filter(expectedWebhook => {
+                return !webhooks.find(webhook => {
+                  return expectedWebhook.config.url === webhook.config.url
+                })
+              })
+              console.log(`Found ${webhooksToCreate.length} webhooks to create for ${repo.owner}/${repo.repo}`)
+
+              const webhooksToUpdate = expectedWebhooks.filter(expectedWebhook => {
+                return webhooks.find(webhook => {
+                  return (expectedWebhook.config.url === webhook.config.url && expectedWebhook.config.content_type !== webhook.config.content_type) || (expectedWebhook.config.url === webhook.config.url && expectedWebhook.config.secret !== webhook.config.secret)
+                })
+              })
+
+              console.log(`Found ${webhooksToUpdate.length} webhooks to update for ${repo.owner}/${repo.repo}`)
+              result.push({
+                repo,
+                webhooksToCreate,
+                webhooksToUpdate
+              })
+            }
+            console.log(`Found ${result.length} repositories with outdated webhooks`)
+            for (const repo of result) {
+              console.log(`Updating webhooks for ${repo.repo.owner}/${repo.repo.repo}`)
+
+              for (const webhook of repo.webhooksToCreate) {
+                await github.rest.repos.createWebhook({
+                  ...repo.repo,
+                  ...webhook
+                })
+                console.log(`Created webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
+              }
+
+              for (const webhook of repo.webhooksToUpdate) {
+                await github.rest.repos.updateWebhook({
+                  ...repo.repo,
+                  ...webhook
+                })
+                console.log(`Updated webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
+              }
             }
