@@ -1,0 +1,89 @@
+{
+  "rulesets": [
+    {
+        "name": "Default Branch",
+        "target": "branch",
+        "bypass_actors": [
+          {
+            "actor_id": 5,
+            "actor_type": "RepositoryRole",
+            "bypass_mode": "always"
+          },
+          {
+            "actor_id": 2,
+            "actor_type": "RepositoryRole",
+            "bypass_mode": "pull_request"
+          }
+        ],
+        "conditions": {
+          "ref_name": {
+            "include": ["~DEFAULT_BRANCH"],
+            "exclude": []
+          }
+        },
+        "enforcement": "active",
+        "rules": [
+          {
+            "type": "required_linear_history"
+          },
+          {
+            "type": "pull_request",
+            "parameters": {
+              "dismiss_stale_reviews_on_push": false,
+              "require_code_owner_review": true,
+              "require_last_push_approval": false,
+              "required_approving_review_count": 1,
+              "required_review_thread_resolution": true
+            }
+          }
+        ]
+    },
+    {
+      "name": "All Branches",
+      "target": "branch",
+      "bypass_actors": [
+        {
+          "actor_id": 5,
+          "actor_type": "RepositoryRole",
+          "bypass_mode": "always"
+        },
+        {
+          "actor_id": 2,
+          "actor_type": "RepositoryRole",
+          "bypass_mode": "always"
+        }
+      ],
+      "conditions": {
+        "ref_name": {
+          "include": ["~ALL"],
+          "exclude": ["~DEFAULT_BRANCH"]
+        }
+      },
+      "enforcement": "active",
+      "rules": [
+        {
+          "type": "required_linear_history"
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "target": "tag",
+      "conditions": {
+        "ref_name": {
+          "include": ["~ALL"],
+          "exclude": []
+        }
+      },
+      "enforcement": "active",
+      "rules": [
+        {
+          "type": "tag_name_pattern",
+          "name": "v*.*.*",
+          "operator": "regex",
+          "value": "^v\\d+\\.\\d+\\.\\d+$"
+        }
+      ]
+    }
+  ]
+}
