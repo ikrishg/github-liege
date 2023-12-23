@@ -292,6 +292,8 @@ jobs:
             const repos = ${{ needs.find-repos.outputs.repos }}
             const { rulesets } = require('${{ github.workspace}}/settings/rulesets.json')
 
+            console.log(`Config has ${rulesets.length} rulesets`)
+
             console.log(`Syncing rulesets for ${repos.length} repositories`)
 
             for (const repo of repos) {
