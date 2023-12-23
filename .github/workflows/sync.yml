@@ -290,20 +290,18 @@ jobs:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
-            const { rulesets } = require('${{ github.workspace}}/settings/rulesets.json')
+            const { rulesets: expectedRulesets } = require('${{ github.workspace}}/settings/rulesets.json')
 
-            console.log(`Config has ${rulesets.length} rulesets`)
+            console.log(`Config has ${expectedRulesets.length} rulesets`)
 
             console.log(`Syncing rulesets for ${repos.length} repositories`)
 
             for (const repo of repos) {
               console.log(`Finding rulesets for ${repo.owner}/${repo.repo}`)
 
-              const rulesets = await github.rest.repos.getRepoRulesets({
+              const { data: rulesets } = await github.rest.repos.getRepoRulesets({
                 ...repo
               })
-
-              console.log(`Found ${rulesets.length} rulesets for ${repo.owner}/${repo.repo}`)
 
               if (process.env.SKIP_REPOS.split(',').includes(`${repo.owner}/${repo.repo}`)) {
                 console.log(`Skipping rulesets for ${repo.owner}/${repo.repo}`)
@@ -326,7 +324,7 @@ jobs:
 
               console.log(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
 
-              for (const ruleset of rulesets) {
+              for (const ruleset of expectedRulesets) {
                 await github.rest.repos.createRepoRuleset({
                   ...repo,
                   ...ruleset
