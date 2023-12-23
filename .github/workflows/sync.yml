@@ -53,6 +53,7 @@ jobs:
         id: find-outdated-labels
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
@@ -108,18 +109,7 @@ jobs:
 
             console.log(`Found ${result.length} repositories with outdated labels`)
 
-            return result
-
-      - name: Update Labels
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.find-outdated-labels.outputs.result }}
-
-            console.log(`Updating labels for ${repos.length} repositories`)
-
-            for (const repo of repos) {
+            for (const repo of result) {
               console.log(`Updating labels for ${repo.owner}/${repo.repo}`)
 
               for (const label of repo.labelsToDelete) {
@@ -183,6 +173,9 @@ jobs:
                 result.push(repo)
               }
             }
+
+            return result
+
       - name: Disable Projects
         uses: actions/github-script@v7
         with:
@@ -219,7 +212,7 @@ jobs:
 
             console.log(`Finding wikis for ${repos.length} repositories`)
 
-            fs.mkdirSync('tmp')
+            await io.mkdirP('${{ github.workspace }}/tmp')
 
             const result = []
 
@@ -228,13 +221,13 @@ jobs:
 
               console.log(`Cloning wiki for ${repo.owner}/${repo.repo}`)
 
-              await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}.wiki.git`, `tmp/${repo.owner}-${repo.repo}-wiki`])
+              await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}.wiki.git`, `${{ github.workspace }}/tmp/${repo.owner}-${repo.repo}-wiki`])
 
               console.log(`Cloned wiki for ${repo.owner}/${repo.repo}`)
 
               console.log(`Finding pages for ${repo.owner}/${repo.repo}`)
 
-              const pages = fs.readdirSync(`tmp/${repo.owner}-${repo.repo}-wiki`)
+              const pages = await (await glob.create(`${{ github.workspace }}/tmp/${repo.owner}-${repo.repo}-wiki/**/*.md`)).glob()
 
               console.log(`Found ${pages.length} pages for ${repo.owner}/${repo.repo}`)
 
@@ -265,166 +258,44 @@ jobs:
               console.log(`Disabled wiki for ${repo.owner}/${repo.repo}`)
             }
 
-  allow-squash-merge:
+  merge-strategies:
     needs: find-repos
     runs-on: ubuntu-latest
+
+    env:
+      ALLOW_SQUASH_MERGE: true
+      ALLOW_REBASE_MERGE: true
+      ALLOW_MERGE_COMMIT: false
+      AUTOMERGE_ENABLED: false
+      DELETE_BRANCH_ON_MERGE: true
+      REQUIRE_WEB_COMMIT_SIGNATURE: true
 
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Allow Squash Merge
+      - name: Set Merge Strategy
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
-            const repos = ${{ needs.find-repos.outputs.repos }},filter(repo => repo.allow_squash_merge === false)
+            const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Allowing squash merge for ${repos.length} repositories`)
+            console.log(`Setting merge strategy for ${repos.length} repositories`)
 
             for (const repo of repos) {
-              console.log(`Allowing squash merge for ${repo.owner}/${repo.repo}`)
+              console.log(`Setting merge strategy for ${repo.owner}/${repo.repo}`)
 
               await github.rest.repos.update({
                 ...repo,
-                allow_squash_merge: true
+                allow_squash_merge: process.env.ALLOW_SQUASH_MERGE === 'true',
+                allow_rebase_merge: process.env.ALLOW_REBASE_MERGE === 'true',
+                allow_merge_commit: process.env.ALLOW_MERGE_COMMIT === 'true',
+                automerge_enabled: process.env.AUTOMERGE_ENABLED === 'true',
+                delete_branch_on_merge: process.env.DELETE_BRANCH_ON_MERGE === 'true',
+                require_commit_signatures: process.env.REQUIRE_WEB_COMMIT_SIGNATURE === 'true'
               })
 
-              console.log(`Allowed squash merge for ${repo.owner}/${repo.repo}`)
-            }
-
-  allow-rebase-merge:
-    needs: find-repos
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Allow Rebase Merge
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.allow_rebase_merge === false)
-
-            console.log(`Allowing rebase merge for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Allowing rebase merge for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                allow_rebase_merge: true
-              })
-
-              console.log(`Allowed rebase merge for ${repo.owner}/${repo.repo}`)
-            }
-
-  disallow-merge-commit:
-    needs: find-repos
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Disallow Merge Commit
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.allow_merge_commit === true)
-
-            console.log(`Disallowed merge commit for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Disallowed merge commit for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                allow_merge_commit: false
-              })
-
-              console.log(`Disallowed merge commit for ${repo.owner}/${repo.repo}`)
-            }
-
-  disallow-automerge:
-    needs: find-repos
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Disallow Automerge
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.automerge_enabled === true)
-
-            console.log(`Disallowed automerge for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Disallowed automerge for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                automerge_enabled: false
-              })
-
-              console.log(`Disallowed automerge for ${repo.owner}/${repo.repo}`)
-            }
-
-  delete-branch-on-merge:
-    needs: find-repos
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Delete Branch on Merge
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.delete_branch_on_merge === false)
-
-            console.log(`Deleting branch on merge for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Deleting branch on merge for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                delete_branch_on_merge: true
-              })
-
-              console.log(`Deleted branch on merge for ${repo.owner}/${repo.repo}`)
-            }
-
-  require-web-commit-signature:
-    needs: find-repos
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Require Web Commit Signature
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.require_commit_signatures === false)
-
-            console.log(`Requiring web commit signature for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Requiring web commit signature for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                require_commit_signatures: true
-              })
-
-              console.log(`Required web commit signature for ${repo.owner}/${repo.repo}`)
+              console.log(`Set merge strategy for ${repo.owner}/${repo.repo}`)
             }
 
   sync-rulesets:
