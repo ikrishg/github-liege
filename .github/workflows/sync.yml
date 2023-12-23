@@ -7,6 +7,10 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: sync
+  cancel-in-progress: true
+
 jobs:
   find-repos:
     runs-on: ubuntu-latest
@@ -93,7 +97,7 @@ jobs:
 
               const labelsToUpdate = expectedLabels.filter(expectedLabel => {
                 return labels.find(label => {
-                  return expectedLabel.name === label.name && expectedLabel.color.replace('#', '') !== label.color || expectedLabel.description !== label.description
+                  return (expectedLabel.name === label.name && expectedLabel.color.replace('#', '') !== label.color) || (expectedLabel.name === label.name && expectedLabel.description !== label.description)
                 })
               })
 
@@ -110,7 +114,7 @@ jobs:
             console.log(`Found ${result.length} repositories with outdated labels`)
 
             for (const repo of result) {
-              console.log(`Updating labels for ${repo.owner}/${repo.repo}`)
+              console.log(`Updating labels for ${repo.repo.owner}/${repo.repo.repo}`)
 
               for (const label of repo.labelsToDelete) {
                 await github.rest.issues.deleteLabel({
@@ -118,7 +122,7 @@ jobs:
                   name: label.name
                 })
 
-                console.log(`Deleted label ${label.name} from ${repo.owner}/${repo.repo}`)
+                console.log(`Deleted label ${label.name} from ${repo.repo.owner}/${repo.repo.repo}`)
               }
 
               for (const label of repo.labelsToCreate) {
@@ -128,7 +132,7 @@ jobs:
                   color: label.color.replace('#', '')
                 })
 
-                console.log(`Created label ${label.name} in ${repo.owner}/${repo.repo}`)
+                console.log(`Created label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
               }
 
               for (const label of repo.labelsToUpdate) {
@@ -138,7 +142,7 @@ jobs:
                   color: label.color.replace('#', '')
                 })
 
-                console.log(`Updated label ${label.name} in ${repo.owner}/${repo.repo}`)
+                console.log(`Updated label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
               }
             }
 
@@ -196,67 +200,40 @@ jobs:
               console.log(`Disabled projects for ${repo.owner}/${repo.repo}`)
             }
 
-  disable-wiki-if-unused:
-    needs: find-repos
-    runs-on: ubuntu-latest
+  # TODO: implement this
+  # disable-wiki-if-unused:
+  #   needs: find-repos
+  #   runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Find Wikis to Disable
-        id: find-wikis-to-disable
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #     - name: Find Wikis to Disable
+  #       id: find-wikis-to-disable
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Finding wikis for ${repos.length} repositories`)
+  #     - name: Disable Wikis
+  #       uses: actions/github-script@v7
+  #       with:
+  #         github-token: ${{ secrets.GH_OWNER_TOKEN }}
+  #         script: |
+  #           const repos = ${{ steps.find-wikis-to-disable.outputs.result }}
 
-            await io.mkdirP('${{ github.workspace }}/tmp')
+  #           console.log(`Disabling wikis for ${repos.length} repositories`)
 
-            const result = []
+  #           for (const repo of repos) {
+  #             console.log(`Disabling wiki for ${repo.owner}/${repo.repo}`)
 
-            for (const repo of repos) {
-              console.log(`Finding wiki for ${repo.owner}/${repo.repo}`)
+  #             await github.rest.repos.update({
+  #               ...repo,
+  #               has_wiki: false
+  #             })
 
-              console.log(`Cloning wiki for ${repo.owner}/${repo.repo}`)
-
-              await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}.wiki.git`, `${{ github.workspace }}/tmp/${repo.owner}-${repo.repo}-wiki`])
-
-              console.log(`Cloned wiki for ${repo.owner}/${repo.repo}`)
-
-              console.log(`Finding pages for ${repo.owner}/${repo.repo}`)
-
-              const pages = await (await glob.create(`${{ github.workspace }}/tmp/${repo.owner}-${repo.repo}-wiki/**/*.md`)).glob()
-
-              console.log(`Found ${pages.length} pages for ${repo.owner}/${repo.repo}`)
-
-              if (pages.length === 0) {
-                result.push(repo)
-              }
-            }
-
-            return result
-
-      - name: Disable Wikis
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.find-wikis-to-disable.outputs.result }}
-
-            console.log(`Disabling wikis for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Disabling wiki for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                has_wiki: false
-              })
-
-              console.log(`Disabled wiki for ${repo.owner}/${repo.repo}`)
-            }
+  #             console.log(`Disabled wiki for ${repo.owner}/${repo.repo}`)
+  #           }
 
   merge-strategies:
     needs: find-repos
@@ -315,12 +292,16 @@ jobs:
             console.log(`Syncing rulesets for ${repos.length} repositories`)
 
             for (const repo of repos) {
+              console.log(`Finding rulesets for ${repo.owner}/${repo.repo}`)
+
               const rulesets = await github.rest.repos.getRepoRulesets({
                 ...repo
               })
 
-              if (rulesets.length !== 0) {
-                continue
+              console.log(`Found ${rulesets.length} rulesets for ${repo.owner}/${repo.repo}`)
+
+              if (rulesets.length > 0) {
+                console.log(`Skipping ruleset sync for ${repo.owner}/${repo.repo}, it already has ${rulesets.length} rulesets`)
               }
 
               console.log(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
@@ -328,8 +309,20 @@ jobs:
               await github.rest.repos.createRepoRuleset({
                 ...repo,
                 name: 'Default',
-                target: 'main',
-                enforcement: 'enabled',
+                target: 'branch',
+                bypass_actors: [
+                  {
+                    actor_id: 1,
+                    actor_type: 'OrganizationAdmin',
+                    bypass_mode: 'always'
+                  }
+                ],
+                conditions: {
+                  ref_name: {
+                    include: ['~DEFAULT_BRANCH']
+                  }
+                },
+                enforcement: 'active',
                 rules: [
                   {
                     type: 'required_linear_history'
@@ -337,7 +330,9 @@ jobs:
                   {
                     type: 'pull_request',
                     parameters: {
+                      dismiss_stale_reviews_on_push: false,
                       require_code_owner_review: true,
+                      require_last_push_approval: false,
                       required_approving_review_count: 1,
                       required_review_thread_resolution: true
                     }
@@ -345,6 +340,7 @@ jobs:
                   {
                     type: 'commit_message_pattern',
                     parameters: {
+                      name: 'Conventional Commits',
                       // Pattern to match: <type>(<scope>): <subject>
                       pattern: '^([a-z]+)(\(([a-z\\-]+\)))?: .{1,50}$',
                       operator: 'regex'
