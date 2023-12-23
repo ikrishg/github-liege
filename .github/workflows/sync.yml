@@ -319,7 +319,8 @@ jobs:
                 ],
                 conditions: {
                   ref_name: {
-                    include: ['~DEFAULT_BRANCH']
+                    include: ['~DEFAULT_BRANCH'],
+                    exclude: []
                   }
                 },
                 enforcement: 'active',
@@ -335,15 +336,6 @@ jobs:
                       require_last_push_approval: false,
                       required_approving_review_count: 1,
                       required_review_thread_resolution: true
-                    }
-                  },
-                  {
-                    type: 'commit_message_pattern',
-                    parameters: {
-                      name: 'Conventional Commits',
-                      // Pattern to match: <type>(<scope>): <subject>
-                      pattern: '^([a-z]+)(\(([a-z\\-]+\)))?: .{1,50}$',
-                      operator: 'regex'
                     }
                   }
                 ]
