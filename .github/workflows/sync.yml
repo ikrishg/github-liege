@@ -42,6 +42,7 @@ jobs:
             });
             console.log(`Passing ${repos.length} repositories to next jobs`)
             return repos
+
   sync-labels:
     needs: find-repos
     runs-on: ubuntu-latest
@@ -144,6 +145,7 @@ jobs:
               }
             }
             return result
+
       - name: Disable Projects
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
@@ -304,6 +306,7 @@ jobs:
                 console.log(`Updated webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
               }
             }
+
   sync-action-permissions:
     needs: find-repos
     runs-on: ubuntu-latest
@@ -327,6 +330,7 @@ jobs:
               })
               console.log(`Synced action permissions for ${repo.owner}/${repo.repo}`)
             }
+
   verify-readme:
     needs: find-repos
     runs-on: ubuntu-latest
@@ -365,32 +369,128 @@ jobs:
           ISSUE_LABEL: "📝 aspect: text"
           ISSUE_BODY: |
             No readme was found in this repository. We should add a readme to this repository to explain what it is and how to use it.
+
             We can refer to readme's from other repositories under [this account](https://github.com/${{github.repository_owner}}) to get inspiration.
+
             Here are the following READMEs we can take the structure from: [xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/reseter.css) or [xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/go-todo-api)
+
             | Example | Repository |
             | --- | --- |
             | ![xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/open-source/assets/135469703/243187de-1fc6-423b-93d4-0ba77e291daf) | [xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/reseter.css) |
             | ![xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/open-source/assets/135469703/f4b399bb-160b-4045-8f2d-cff9d627dcc7) | [xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/reseter.css) |
+
             If you have any questions, please reach out to me.
+
             <details>
               <summary>📝 What is a readme?</summary>
+
               A readme is a file that explains what a repository is and how to use it. It is the first thing people see when they visit a repository. It is important to have a readme so people know what your repository is and how to use it.
             </details>
+
             <details>
               <summary>🤔 How do I create a readme?</summary>
+
               Here is a <a href="https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/creating-a-repository-on-github/about-readmes">guide</a> on how to create a readme.
+
               Please take inspiration from the READMEs mentioned above.
             </details>
+
             <details>
               <summary>✍🏻 What should I put in the readme?</summary>
+
               Here is a <a href="https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/creating-a-repository-on-github/about-readmes">guide</a> on what to put in a readme.
             </details>
+
             Thank you for your help! 🙏🏻 If you require any assistance, please reach out to me.
-            P.S. This is an [automated issue](https://github.com/${{ github.repository }}/actions/runs/${{github.run_id}}).
+            P.S. This is an [automated issue](https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}).
         with:
-          github-token: ${{ secrets.GH_BOT_TOKEN }}
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ steps.check-readme.outputs.result }}
+            console.log(`Creating issue for ${repos.length} repositories`)
+            for (const repo of repos) {
+              const issueAlreadyExists = await github.paginate(
+                github.rest.issues.listForRepo,
+                { ...repo, labels: process.env.ISSUE_LABEL }
+              ).then(issues => {
+                return issues.find(issue => {
+                  return issue.title === process.env.ISSUE_TITLE && issue.state === 'open'
+                })
+              })
+              if (issueAlreadyExists) {
+                console.log(`Issue already exists for ${repo.owner}/${repo.repo}`)
+                continue
+              }
+              const issue = await github.rest.issues.create({
+                ...repo,
+                title: process.env.ISSUE_TITLE,
+                body: process.env.ISSUE_BODY,
+                labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
+              })
+              console.log(`Created issue for ${repo.owner}/${repo.repo}`)
+              console.log(`Issue: ${issue.data.html_url}`)
+            }
+
+  verify-license:
+    needs: find-repos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Check License
+        id: check-license
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const repos = ${{ needs.find-repos.outputs.repos }}
+            const fs = require('node:fs')
+            console.log(`Checking license for ${repos.length} repositories`)
+            io.mkdirP(`${{ github.workspace }}/tmp`)
+            const result = []
+            for (const repo of repos) {
+              console.log(`Checking license for ${repo.owner}/${repo.repo}`)
+              await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}`, `${{ github.workspace }}/tmp/${repo.repo}`])
+
+              const license = fs.readdirSync(`${{ github.workspace }}/tmp/${repo.repo}`).filter(file => file.toLowerCase().startsWith('license'))
+
+              if (license.length !== 0) {
+                console.log(`License found for ${repo.owner}/${repo.repo}`)
+                continue
+              }
+
+              console.log(`License not found for ${repo.owner}/${repo.repo}`)
+
+              result.push(repo)
+            }
+
+            return result
+
+      - name: Create Issue
+        id: create-issue
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          ISSUE_TITLE: "[Documentation]: Create License"
+          ISSUE_LABEL: "📝 aspect: text"
+          ISSUE_BODY: |
+            No license was found in this repository. We should add a license to this repository to explain how people can use this repository.
+
+            Please use the license found in the [community health files](https://github.com/${{github.repository_owner}}/.github) of this account.
+
+            The liecense should be placed in the root of the repository and should be named `LICENSE`.
+
+            If you have any questions, please reach out to me.
+
+            Here is a [guide](https://docs.github.com/en/github/building-a-strong-community/adding-a-license-to-a-repository) on how to add a license to a repository.
+
+            Thank you for your help! 🙏🏻 If you require any assistance, please reach out to me.
+
+            P.S. This is an [automated issue](https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}).
+        with:
+          github-token: ${{ secrets.GH_OWNER_TOKEN }}
+          script: |
+            const repos = ${{ steps.check-license.outputs.result }}
             console.log(`Creating issue for ${repos.length} repositories`)
             for (const repo of repos) {
               const issueAlreadyExists = await github.paginate(
