@@ -20,9 +20,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Find All Repositories
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         id: find-repos
         with:
           script: |
@@ -52,10 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Find Outdated Labels
         id: find-outdated-labels
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -152,10 +152,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Find Projects to Disable
         id: find-projects-to-disable
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.has_projects)
@@ -180,7 +180,7 @@ jobs:
             return result
 
       - name: Disable Projects
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -199,41 +199,6 @@ jobs:
               console.log(`Disabled projects for ${repo.owner}/${repo.repo}`)
             }
 
-  # TODO: implement this
-  # disable-wiki-if-unused:
-  #   needs: find-repos
-  #   runs-on: ubuntu-latest
-
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v2
-  #     - name: Find Wikis to Disable
-  #       id: find-wikis-to-disable
-  #       uses: actions/github-script@v7
-  #       with:
-  #         script: |
-  #           const repos = ${{ needs.find-repos.outputs.repos }}
-
-  #     - name: Disable Wikis
-  #       uses: actions/github-script@v7
-  #       with:
-  #         github-token: ${{ secrets.GH_OWNER_TOKEN }}
-  #         script: |
-  #           const repos = ${{ steps.find-wikis-to-disable.outputs.result }}
-
-  #           console.log(`Disabling wikis for ${repos.length} repositories`)
-
-  #           for (const repo of repos) {
-  #             console.log(`Disabling wiki for ${repo.owner}/${repo.repo}`)
-
-  #             await github.rest.repos.update({
-  #               ...repo,
-  #               has_wiki: false
-  #             })
-
-  #             console.log(`Disabled wiki for ${repo.owner}/${repo.repo}`)
-  #           }
-
   merge-strategies:
     needs: find-repos
     runs-on: ubuntu-latest
@@ -248,9 +213,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Set Merge Strategy
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -280,9 +245,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Sync Rulesets
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         env:
           SKIP_REPOS: ""
         with:
@@ -341,9 +306,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Sync Webhooks
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         with:
@@ -412,9 +377,9 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Sync Action Permissions
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -443,10 +408,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        uses: actions/checkout@v4 # v4
       - name: Check Readme
         id: check-readme
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
@@ -480,7 +445,7 @@ jobs:
 
       - name: Create Issue
         id: create-issue
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         env:
           ISSUE_TITLE: "[Documentation]: Create Readme"
           ISSUE_BODY: |
@@ -565,7 +530,7 @@ jobs:
             return issues
 
       - name: Create Basic Readme
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_BOT_TOKEN }}
           script: |
@@ -592,7 +557,7 @@ jobs:
 
       - name: Push Basic Readme
         id: push-basic-readme
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         env:
           GITHUB_TOKEN: ${{ secrets.GH_OWNER_TOKEN }}
         with:
@@ -615,7 +580,7 @@ jobs:
             return repos
 
       - name: Add Label
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea@v7
+        uses: actions/github-script@v7@v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -637,7 +602,7 @@ jobs:
 
       - name: Basic Readme PR
         id: create-basic-readme-pr
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -658,7 +623,7 @@ jobs:
             return pulls
 
       - name: Comment on Issue
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        uses: actions/github-script@v7 # v7
         with:
           github-token: ${{ secrets.GH_BOT_TOKEN }}
           script: |
