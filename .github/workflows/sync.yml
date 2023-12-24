@@ -20,89 +20,70 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Find All Repositories
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: find-repos
         with:
           script: |
             console.log(`Finding all repositories for ${context.repo.owner}`)
-
             const data = await github.paginate(
               github.rest.repos.listForUser,
               { username: context.repo.owner }
             )
-
             console.log(`Found ${data.length} repositories for ${context.repo.owner}`)
             console.log(`Repositories: ${data.map(repo => repo.name).join(', ')}`)
-
             const repos = data.map(repo => {
               return {
                 owner: repo.owner.login,
                 repo: repo.name,
+                has_projects: repo.has_projects
               }
             });
-
             console.log(`Passing ${repos.length} repositories to next jobs`)
-
             return repos
-
   sync-labels:
     needs: find-repos
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Find Outdated Labels
         id: find-outdated-labels
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
-
             console.log(`Finding outdated labels for ${repos.length} repositories`)
-
             const { labels: expectedLabels } = require('${{ github.workspace}}/settings/labels.json')
-
             console.log(`Found ${expectedLabels.length} expected labels from ${{ github.workspace}}/settings/labels.json`)
-
             const result = []
-
             for (const repo of repos) {
               console.log(`Finding labels for ${repo.owner}/${repo.repo}`)
-
               const labels = await github.paginate(
                 github.rest.issues.listLabelsForRepo,
                 { ...repo }
               )
-
               console.log(`Found ${labels.length} labels for ${repo.owner}/${repo.repo}`)
-
               const labelsToDelete = labels.filter(label => {
                 return !expectedLabels.find(expectedLabel => {
                   return expectedLabel.name === label.name
                 })
               })
-
               console.log(`Found ${labelsToDelete.length} labels to delete for ${repo.owner}/${repo.repo}`)
-
               const labelsToCreate = expectedLabels.filter(expectedLabel => {
                 return !labels.find(label => {
                   return expectedLabel.name === label.name
                 })
               })
-
               console.log(`Found ${labelsToCreate.length} labels to create for ${repo.owner}/${repo.repo}`)
-
               const labelsToUpdate = expectedLabels.filter(expectedLabel => {
                 return labels.find(label => {
                   return (expectedLabel.name === label.name && expectedLabel.color.replace('#', '') !== label.color) || (expectedLabel.name === label.name && expectedLabel.description !== label.description)
                 })
               })
-
               console.log(`Found ${labelsToUpdate.length} labels to update for ${repo.owner}/${repo.repo}`)
-
               result.push({
                 repo,
                 labelsToDelete,
@@ -110,92 +91,72 @@ jobs:
                 labelsToUpdate
               })
             }
-
             console.log(`Found ${result.length} repositories with outdated labels`)
-
             for (const repo of result) {
               console.log(`Updating labels for ${repo.repo.owner}/${repo.repo.repo}`)
-
               for (const label of repo.labelsToDelete) {
                 await github.rest.issues.deleteLabel({
                   ...repo.repo,
                   name: label.name
                 })
-
                 console.log(`Deleted label ${label.name} from ${repo.repo.owner}/${repo.repo.repo}`)
               }
-
               for (const label of repo.labelsToCreate) {
                 await github.rest.issues.createLabel({
                   ...repo.repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
-
                 console.log(`Created label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
               }
-
               for (const label of repo.labelsToUpdate) {
                 await github.rest.issues.updateLabel({
                   ...repo.repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
-
                 console.log(`Updated label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
               }
             }
-
   disable-projects-if-unused:
     needs: find-repos
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Find Projects to Disable
         id: find-projects-to-disable
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.has_projects)
-
             console.log(`Finding projects for ${repos.length} repositories`)
-
             const result = []
-
             for (const repo of repos) {
               const projects = await github.paginate(
                 github.rest.projects.listForRepo,
                 { ...repo }
               )
-
               console.log(`Found ${projects.length} projects for ${repo.owner}/${repo.repo}`)
-
               if (projects.length === 0) {
                 result.push(repo)
               }
             }
-
             return result
-
       - name: Disable Projects
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ steps.find-projects-to-disable.outputs.result }}
-
             console.log(`Disabling projects for ${repos.length} repositories`)
-
             for (const repo of repos) {
               console.log(`Disabling projects for ${repo.owner}/${repo.repo}`)
-
               await github.rest.repos.update({
                 ...repo,
                 has_projects: false
               })
-
               console.log(`Disabled projects for ${repo.owner}/${repo.repo}`)
             }
 
@@ -213,19 +174,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Set Merge Strategy
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
-
             console.log(`Setting merge strategy for ${repos.length} repositories`)
-
             for (const repo of repos) {
               console.log(`Setting merge strategy for ${repo.owner}/${repo.repo}`)
-
               await github.rest.repos.update({
                 ...repo,
                 allow_squash_merge: process.env.ALLOW_SQUASH_MERGE === 'true',
@@ -235,19 +193,17 @@ jobs:
                 delete_branch_on_merge: process.env.DELETE_BRANCH_ON_MERGE === 'true',
                 require_commit_signatures: process.env.REQUIRE_WEB_COMMIT_SIGNATURE === 'true'
               })
-
               console.log(`Set merge strategy for ${repo.owner}/${repo.repo}`)
             }
-
   sync-rulesets:
     needs: find-repos
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Sync Rulesets
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           SKIP_REPOS: ""
         with:
@@ -255,60 +211,46 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
             const { rulesets: expectedRulesets } = require('${{ github.workspace}}/settings/rulesets.json')
-
             console.log(`Config has ${expectedRulesets.length} rulesets`)
-
             console.log(`Syncing rulesets for ${repos.length} repositories`)
-
             for (const repo of repos) {
               console.log(`Finding rulesets for ${repo.owner}/${repo.repo}`)
-
               const { data: rulesets } = await github.rest.repos.getRepoRulesets({
                 ...repo
               })
-
               if (process.env.SKIP_REPOS.split(',').includes(`${repo.owner}/${repo.repo}`)) {
                 console.log(`Skipping rulesets for ${repo.owner}/${repo.repo}`)
-
                 continue
               }
-
               if (rulesets.length > 0) {
                 console.log(`Deleting rulesets for ${repo.owner}/${repo.repo}`)
-
                 for (const ruleset of rulesets) {
                   await github.rest.repos.deleteRepoRuleset({
                     ...repo,
                     ruleset_id: ruleset.id
                   })
-
                   console.log(`Deleted ruleset ${ruleset.id} for ${repo.owner}/${repo.repo}`)
                 }
               }
-
               console.log(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
-
               for (const ruleset of expectedRulesets) {
                 await github.rest.repos.createRepoRuleset({
                   ...repo,
                   ...ruleset
                 })
-
                 console.log(`Synced ruleset ${ruleset.name} for ${repo.owner}/${repo.repo}`)
               }
-
               console.log(`Synced rulesets for ${repo.owner}/${repo.repo}`)
             }
-
   sync-webhooks:
     needs: find-repos
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Sync Webhooks
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         with:
@@ -324,22 +266,18 @@ jobs:
                 { ...repo }
               )
               console.log(`Found ${webhooks.length} webhooks for ${repo.owner}/${repo.repo}`)
-
               const webhooksToCreate = expectedWebhooks.filter(expectedWebhook => {
                 return !webhooks.find(webhook => {
                   return expectedWebhook.config.url === webhook.config.url
                 })
               })
               console.log(`Found ${webhooksToCreate.length} webhooks to create for ${repo.owner}/${repo.repo}`)
-
               const webhooksToUpdate = expectedWebhooks.filter(expectedWebhook => {
                 return webhooks.find(webhook => {
                   return (expectedWebhook.config.url === webhook.config.url && expectedWebhook.config.content_type !== webhook.config.content_type) || (expectedWebhook.config.url === webhook.config.url && expectedWebhook.config.secret !== webhook.config.secret)
                 })
               })
-
               console.log(`Found ${webhooksToUpdate.length} webhooks to update for ${repo.owner}/${repo.repo}`)
-
               if (webhooksToCreate.length > 0 || webhooksToUpdate.length > 0) {
                 result.push({
                   repo,
@@ -348,12 +286,9 @@ jobs:
                 })
               }
             }
-
             console.log(`Found ${result.length} repositories with outdated webhooks`)
-
             for (const repo of result) {
               console.log(`Updating webhooks for ${repo.repo.owner}/${repo.repo.repo}`)
-
               for (const webhook of repo.webhooksToCreate) {
                 await github.rest.repos.createWebhook({
                   ...repo.repo,
@@ -361,7 +296,6 @@ jobs:
                 })
                 console.log(`Created webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
               }
-
               for (const webhook of repo.webhooksToUpdate) {
                 await github.rest.repos.updateWebhook({
                   ...repo.repo,
@@ -370,131 +304,94 @@ jobs:
                 console.log(`Updated webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
               }
             }
-
   sync-action-permissions:
     needs: find-repos
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Sync Action Permissions
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
-
             console.log(`Syncing action permissions for ${repos.length} repositories`)
-
             for (const repo of repos) {
               console.log(`Syncing action permissions for ${repo.owner}/${repo.repo}`)
-
               await github.rest.actions.setGithubActionsDefaultWorkflowPermissionsRepository({
                 ...repo,
                 default_workflow_permissions: 'write',
                 can_approve_pull_request_reviews: true
               })
-
               console.log(`Synced action permissions for ${repo.owner}/${repo.repo}`)
             }
-
   verify-readme:
     needs: find-repos
     runs-on: ubuntu-latest
 
-    env:
-      ISSUE_LABEL: "📝 aspect: text"
-
     steps:
       - name: Checkout
-        uses: actions/checkout@v4 # v4
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
       - name: Check Readme
         id: check-readme
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
             const fs = require('node:fs')
-
             console.log(`Checking readme for ${repos.length} repositories`)
-
             io.mkdirP(`${{ github.workspace }}/tmp`)
-
             const result = []
-
             for (const repo of repos) {
               console.log(`Checking readme for ${repo.owner}/${repo.repo}`)
-
               await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}`, `${{ github.workspace }}/tmp/${repo.repo}`])
-
               const readme = fs.readdirSync(`${{ github.workspace }}/tmp/${repo.repo}`).filter(file => file.toLowerCase().startsWith('readme'))
-
               if (readme.length !== 0) {
                 console.log(`Readme found for ${repo.owner}/${repo.repo}`)
-
                 continue
               }
-
               console.log(`Readme not found for ${repo.owner}/${repo.repo}`)
-
               result.push(repo)
             }
-
             return result
 
       - name: Create Issue
-        id: create-issue
-        uses: actions/github-script@v7 # v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           ISSUE_TITLE: "[Documentation]: Create Readme"
+          ISSUE_LABEL: "📝 aspect: text"
           ISSUE_BODY: |
             No readme was found in this repository. We should add a readme to this repository to explain what it is and how to use it.
-
             We can refer to readme's from other repositories under [this account](https://github.com/${{github.repository_owner}}) to get inspiration.
-
             Here are the following READMEs we can take the structure from: [xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/reseter.css) or [xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/go-todo-api)
-
             | Example | Repository |
             | --- | --- |
             | ![xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/open-source/assets/135469703/243187de-1fc6-423b-93d4-0ba77e291daf) | [xkrishguptaa/reseter.css](https://github.com/xkrishguptaa/reseter.css) |
             | ![xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/open-source/assets/135469703/f4b399bb-160b-4045-8f2d-cff9d627dcc7) | [xkrishguptaa/go-todo-api](https://github.com/xkrishguptaa/reseter.css) |
-
             If you have any questions, please reach out to me.
-
             <details>
               <summary>📝 What is a readme?</summary>
-
               A readme is a file that explains what a repository is and how to use it. It is the first thing people see when they visit a repository. It is important to have a readme so people know what your repository is and how to use it.
             </details>
             <details>
               <summary>🤔 How do I create a readme?</summary>
-
               Here is a <a href="https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/creating-a-repository-on-github/about-readmes">guide</a> on how to create a readme.
-
               Please take inspiration from the READMEs mentioned above.
-
             </details>
-
             <details>
               <summary>✍🏻 What should I put in the readme?</summary>
-
               Here is a <a href="https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/creating-a-repository-on-github/about-readmes">guide</a> on what to put in a readme.
-
             </details>
-
             Thank you for your help! 🙏🏻 If you require any assistance, please reach out to me.
-
-            P.S. This is an [automated issue](https://github.com/${{github.repository}}/actions/runs/${{github.run_id}}).
+            P.S. This is an [automated issue](https://github.com/${{ github.repository }}/actions/runs/${{github.run_id}}).
         with:
           github-token: ${{ secrets.GH_BOT_TOKEN }}
           script: |
             const repos = ${{ steps.check-readme.outputs.result }}
-
             console.log(`Creating issue for ${repos.length} repositories`)
-
-            const issues = []
-
             for (const repo of repos) {
               const issueAlreadyExists = await github.paginate(
                 github.rest.issues.listForRepo,
@@ -504,143 +401,16 @@ jobs:
                   return issue.title === process.env.ISSUE_TITLE && issue.state === 'open'
                 })
               })
-
               if (issueAlreadyExists) {
                 console.log(`Issue already exists for ${repo.owner}/${repo.repo}`)
-
                 continue
               }
-
               const issue = await github.rest.issues.create({
                 ...repo,
                 title: process.env.ISSUE_TITLE,
                 body: process.env.ISSUE_BODY,
                 labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
               })
-
               console.log(`Created issue for ${repo.owner}/${repo.repo}`)
               console.log(`Issue: ${issue.data.html_url}`)
-
-              issues.push({
-                issue: issue.data,
-                ...repo
-              })
             }
-
-            return issues
-
-      - name: Create Basic Readme
-        uses: actions/github-script@v7 # v7
-        with:
-          github-token: ${{ secrets.GH_BOT_TOKEN }}
-          script: |
-            const issues = ${{ steps.create-issue.outputs.result }}
-            const fs = require('node:fs')
-
-            console.log(`Creating basic readme for ${issues.length} repositories`)
-
-            await exec.exec('git', ['config', '--global', 'user.email', 'github-actions[bot]@users.noreply.github.com'])
-            await exec.exec('git', ['config', '--global', 'user.name', 'github-actions[bot]'])
-
-            for (const repo of issues) {
-              console.log(`Creating basic readme for ${repo.owner}/${repo.repo}`)
-
-              await exec.exec('git', ['checkout', '-b', 'docs-add-basic-readme'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-
-              const readme = `<div align="center">\n<img src="https://github.com/${repo.owner}.png" height="100px" width="100px" style="border-radius: 100%;" />\n<br />\n<h1>.github</h1>\n<p>${repo.description}</p>\n</div>`
-
-              fs.writeFileSync(`${{ github.workspace }}/tmp/${repo.repo}/README.md`, readme)
-
-              await exec.exec('git', ['add', 'README.md'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-              await exec.exec('git', ['commit', '-m', 'docs: add basic readme'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-            }
-
-      - name: Push Basic Readme
-        id: push-basic-readme
-        uses: actions/github-script@v7 # v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_OWNER_TOKEN }}
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.create-issue.outputs.result }}
-
-            console.log(`Pushing basic readme for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Pushing basic readme for ${repo.owner}/${repo.repo}`)
-
-              await exec.exec('git', ['remote', 'set-url', 'origin', `https://xkrishguptaa:${process.env.GITHUB_TOKEN}@github.com/${repo.owner}/${repo.repo}`], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-              await exec.exec('git', ['push', '--set-upstream', 'origin', 'docs-add-basic-readme'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-              await exec.exec('git', ['checkout', 'main'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-
-              console.log(`Pushed basic readme for ${repo.owner}/${repo.repo}`)
-            }
-
-            return repos
-
-      - name: Add Label
-        uses: actions/github-script@v7@v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.push-basic-readme.outputs.result }}
-
-            console.log(`Adding label for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Adding label for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.issues.addLabels({
-                ...repo,
-                issue_number: repo.issue.number,
-                labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
-              })
-
-              console.log(`Added label for ${repo.owner}/${repo.repo}`)
-            }
-
-      - name: Basic Readme PR
-        id: create-basic-readme-pr
-        uses: actions/github-script@v7 # v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.push-basic-readme.outputs.result }}
-
-            console.log(`Creating basic readme PR for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              console.log(`Creating basic readme PR for ${repo.owner}/${repo.repo}`)
-
-              await exec.exec('gh', ['pr', 'create', '--title', 'docs: add basic readme', '--body', `This is an [automated pull request](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) to add a basic readme to this repository.\n This is in reference to issue #${repo.issue.number}.\nIt is simply supposed to create a starting point for the readme.\nIf you have any questions, please reach out to me.`, '--base', 'main', '--head', 'docs-add-basic-readme', '--repo', `${repo.owner}/${repo.repo}`, `--label`, process.env.ISSUE_LABEL])
-
-              await exec.exec('git', ['branch', '-D', 'docs-add-basic-readme'], { cwd: `${{ github.workspace }}/tmp/${repo.repo}` })
-
-              await exec.exec('gh', ['pr', 'merge', 'docs-add-basic-readme', '--squash', '--repo', `${repo.owner}/${repo.repo}`])
-            }
-
-            return pulls
-
-      - name: Comment on Issue
-        uses: actions/github-script@v7 # v7
-        with:
-          github-token: ${{ secrets.GH_BOT_TOKEN }}
-          script: |
-            const pulls = ${{ steps.create-basic-readme-pr.outputs.result }}
-
-            console.log(`Commenting on issue for ${pulls.length} repositories`)
-
-            for (const pull of pulls) {
-              console.log(`Commenting on issue for ${pull.owner}/${pull.repo}`)
-
-              await github.rest.issues.createComment({
-                ...pull,
-                issue_number: pull.issue.number,
-                body: `I have merged a starting point for the readme. Now you only need to add sections and update incorrect information.`
-              })
-
-              console.log(`Commented on issue for ${pull.owner}/${pull.repo}`)
-            }
-
-            console.log(`Commented on issue for ${pulls.length} repositories`)
