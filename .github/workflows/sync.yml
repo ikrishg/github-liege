@@ -33,7 +33,9 @@ jobs:
             )
             console.log(`Found ${data.length} repositories for ${context.repo.owner}`)
             console.log(`Repositories: ${data.map(repo => repo.name).join(', ')}`)
-            const repos = data.map(repo => {
+            const repos = data.filter(repo => {
+              return !repo.archived && !repo.disabled && !repo.fork
+            }).map(repo => {
               return {
                 owner: repo.owner.login,
                 repo: repo.name,
