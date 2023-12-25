@@ -18,6 +18,12 @@ jobs:
     outputs:
       repos: ${{ steps.find-repos.outputs.result }}
 
+    env:
+      ARCHIVED: false
+      DISABLED: false
+      FORKS: false
+
+
     steps:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
@@ -27,19 +33,28 @@ jobs:
         id: find-repos
         with:
           script: |
-            console.log(`Finding all repositories for ${context.repo.owner}`)
+            core.info(`Finding all repositories for ${context.repo.owner}`)
 
             const data = await github.paginate(
               github.rest.repos.listForUser,
               { username: context.repo.owner }
             )
 
-            console.log(`Found ${data.length} repositories for ${context.repo.owner}`)
+            core.info(`Found ${data.length} repositories for ${context.repo.owner}`)
 
-            console.log(`Repositories: ${data.map(repo => repo.name).join(', ')}`)
+            core.info(`Repositories: ${data.map(repo => repo.name).join(', ')}`)
+
+            core.debug(JSON.stringify(data, null, 2))
+
+            core.info(`Filtering repositories for ${context.repo.owner}`)
+            core.debug(`Filteration criteria: !repo.archived && !repo.disabled && !repo.fork`)
 
             const repos = data.filter(repo => {
-              return !repo.archived && !repo.disabled && !repo.fork
+              const archived = process.env.ARCHIVED === 'true' ? true : repo.archived
+              const disabled = process.env.DISABLED === 'true' ? true : repo.disabled
+              const fork = process.env.FORKS === 'true' ? true : repo.fork
+
+              return !archived && !disabled && !fork
             }).map(repo => {
               return {
                 owner: repo.owner.login,
@@ -48,7 +63,11 @@ jobs:
               }
             });
 
-            console.log(`Passing ${repos.length} repositories to next jobs`)
+            core.info(`Passing ${repos.length} repositories to next jobs`)
+
+            core.debug(JSON.stringify(repos, null, 2))
+
+            core.summary.addRaw(`Found ${repos.length} repositories for ${context.repo.owner}`)
 
             return repos
 
@@ -68,23 +87,31 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Finding outdated labels for ${repos.length} repositories`)
+            core.info(`Finding outdated labels for ${repos.length} repositories`)
 
-            const { labels: expectedLabels } = require('${{ github.workspace}}/settings/labels.json')
+            const { labels: expectedLabels } = require('${{ github.workspace }}/config/labels.json')
 
-            console.log(`Found ${expectedLabels.length} expected labels from ${{ github.workspace}}/settings/labels.json`)
+            core.info(`Found ${expectedLabels.length} expected labels from ${{ github.workspace}}/config/labels.json`)
 
-            const result = []
+            core.debug(JSON.stringify(expectedLabels, null, 2))
+
+            let deletedLabels = 0
+            let createdLabels = 0
+            let updatedLabels = 0
 
             for (const repo of repos) {
-              console.log(`Finding labels for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Finding labels for ${repo.owner}/${repo.repo}`)
 
               const labels = await github.paginate(
                 github.rest.issues.listLabelsForRepo,
                 { ...repo }
               )
 
-              console.log(`Found ${labels.length} labels for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${labels.length} labels for ${repo.owner}/${repo.repo}`)
+
+              core.debug(JSON.stringify(labels, null, 2))
 
               const labelsToDelete = labels.filter(label => {
                 return !expectedLabels.find(expectedLabel => {
@@ -92,7 +119,9 @@ jobs:
                 })
               })
 
-              console.log(`Found ${labelsToDelete.length} labels to delete for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${labelsToDelete.length} labels to delete for ${repo.owner}/${repo.repo}`)
+
+              core.debug(JSON.stringify(labelsToDelete, null, 2))
 
               const labelsToCreate = expectedLabels.filter(expectedLabel => {
                 return !labels.find(label => {
@@ -100,7 +129,9 @@ jobs:
                 })
               })
 
-              console.log(`Found ${labelsToCreate.length} labels to create for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${labelsToCreate.length} labels to create for ${repo.owner}/${repo.repo}`)
+
+              core.debug(JSON.stringify(labelsToCreate, null, 2))
 
               const labelsToUpdate = expectedLabels.filter(expectedLabel => {
                 return labels.find(label => {
@@ -108,47 +139,56 @@ jobs:
                 })
               })
 
-              console.log(`Found ${labelsToUpdate.length} labels to update for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${labelsToUpdate.length} labels to update for ${repo.owner}/${repo.repo}`)
 
-              result.push({
-                repo,
-                labelsToDelete,
-                labelsToCreate,
-                labelsToUpdate
-              })
-            }
+              core.debug(JSON.stringify(labelsToUpdate, null, 2))
 
-            console.log(`Found ${result.length} repositories with outdated labels`)
-
-            for (const repo of result) {
-              console.log(`Updating labels for ${repo.repo.owner}/${repo.repo.repo}`)
-
-              for (const label of repo.labelsToDelete) {
+              for (const label of labelsToDelete) {
                 await github.rest.issues.deleteLabel({
                   ...repo.repo,
                   name: label.name
                 })
-                console.log(`Deleted label ${label.name} from ${repo.repo.owner}/${repo.repo.repo}`)
+
+                core.info(`Deleted label ${label.name} from ${repo.repo.owner}/${repo.repo.repo}`)
+
+                deletedLabels++
               }
 
-              for (const label of repo.labelsToCreate) {
+              for (const label of labelsToCreate) {
                 await github.rest.issues.createLabel({
                   ...repo.repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
-                console.log(`Created label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
+
+                core.info(`Created label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
+
+                createdLabels++
               }
 
-              for (const label of repo.labelsToUpdate) {
+              for (const label of labelsToUpdate) {
                 await github.rest.issues.updateLabel({
                   ...repo.repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
-                console.log(`Updated label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
+
+                core.info(`Updated label ${label.name} in ${repo.repo.owner}/${repo.repo.repo}`)
+
+                updatedLabels++
               }
+
+              core.info(`Finished syncing labels for ${repo.owner}/${repo.repo}`)
+              core.endGroup()
             }
+
+            core.info(`Finished syncing labels for ${repos.length} repositories`)
+
+            core.info(`Deleted: ${deletedLabels} labels`)
+            core.info(`Created: ${createdLabels} labels`)
+            core.info(`Updated: ${updatedLabels} labels`)
+
+            core.summary.addRaw(`Updated ${updatedLabels} labels, created ${createdLabels} labels, and deleted ${deletedLabels} labels`)
 
   disable-projects-if-unused:
     runs-on: ubuntu-latest
@@ -165,22 +205,32 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.has_projects)
 
-            console.log(`Finding projects for ${repos.length} repositories`)
+            core.info(`Finding projects for ${repos.length} repositories`)
 
             const result = []
 
             for (const repo of repos) {
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Finding projects for ${repo.owner}/${repo.repo}`)
+
               const projects = await github.paginate(
                 github.rest.projects.listForRepo,
                 { ...repo }
               )
 
-              console.log(`Found ${projects.length} projects for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${projects.length} projects for ${repo.owner}/${repo.repo}`)
+
+              core.debug(JSON.stringify(projects, null, 2))
 
               if (projects.length === 0) {
                 result.push(repo)
               }
+
+              core.endGroup()
             }
+
+            core.summary.addRaw(`Found ${result.length} repositories with unused project boards`)
 
             return result
 
@@ -191,18 +241,24 @@ jobs:
           script: |
             const repos = ${{ steps.find-projects-to-disable.outputs.result }}
 
-            console.log(`Disabling projects for ${repos.length} repositories`)
+            core.info(`Disabling projects for ${repos.length} repositories`)
 
             for (const repo of repos) {
-              console.log(`Disabling projects for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Disabling projects for ${repo.owner}/${repo.repo}`)
 
               await github.rest.repos.update({
                 ...repo,
                 has_projects: false
               })
 
-              console.log(`Disabled projects for ${repo.owner}/${repo.repo}`)
+              core.info(`Disabled projects for ${repo.owner}/${repo.repo}`)
+
+              core.endGroup()
             }
+
+            core.summary.addRaw(`Disabled projects for ${repos.length} repositories`)
 
   merge-strategies:
     runs-on: ubuntu-latest
@@ -227,10 +283,12 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Setting merge strategy for ${repos.length} repositories`)
+            core.info(`Setting merge strategy for ${repos.length} repositories`)
 
             for (const repo of repos) {
-              console.log(`Setting merge strategy for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Setting merge strategy for ${repo.owner}/${repo.repo}`)
 
               await github.rest.repos.update({
                 ...repo,
@@ -242,7 +300,9 @@ jobs:
                 require_commit_signatures: process.env.REQUIRE_WEB_COMMIT_SIGNATURE === 'true'
               })
 
-              console.log(`Set merge strategy for ${repo.owner}/${repo.repo}`)
+              core.info(`Set merge strategy for ${repo.owner}/${repo.repo}`)
+
+              core.endGroup()
             }
 
   sync-rulesets:
@@ -252,6 +312,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
       - name: Sync Rulesets
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
@@ -261,36 +322,47 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            const { rulesets: expectedRulesets } = require('${{ github.workspace}}/settings/rulesets.json')
+            const { rulesets: expectedRulesets } = require('${{ github.workspace}}/config/rulesets.json')
 
-            console.log(`Config has ${expectedRulesets.length} rulesets`)
+            core.info(`Config has ${expectedRulesets.length} rulesets`)
 
-            console.log(`Syncing rulesets for ${repos.length} repositories`)
+            core.debug(JSON.stringify(expectedRulesets, null, 2))
+
+            core.info(`Syncing rulesets for ${repos.length} repositories`)
+
+            core.warning(`Skipping ruleset syncing for ${process.env.SKIP_REPOS.split(',').join(', ')}`)
 
             for (const repo of repos) {
-              console.log(`Finding rulesets for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Finding rulesets for ${repo.owner}/${repo.repo}`)
 
               const { data: rulesets } = await github.rest.repos.getRepoRulesets({
                 ...repo
               })
 
               if (process.env.SKIP_REPOS.split(',').includes(`${repo.owner}/${repo.repo}`)) {
-                console.log(`Skipping rulesets for ${repo.owner}/${repo.repo}`)
+                core.info(`Skipping ruleset syncing for ${repo.owner}/${repo.repo}`)
+                core.endGroup()
                 continue
               }
 
               if (rulesets.length > 0) {
-                console.log(`Deleting rulesets for ${repo.owner}/${repo.repo}`)
+                core.info(`Deleting rulesets for ${repo.owner}/${repo.repo}`)
+
                 for (const ruleset of rulesets) {
                   await github.rest.repos.deleteRepoRuleset({
                     ...repo,
                     ruleset_id: ruleset.id
                   })
-                  console.log(`Deleted ruleset ${ruleset.id} for ${repo.owner}/${repo.repo}`)
+
+                  core.info(`Deleted ruleset ${ruleset.name} for ${repo.owner}/${repo.repo}`)
                 }
+
+                core.info(`Deleted rulesets for ${repo.owner}/${repo.repo}`)
               }
 
-              console.log(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
+              core.info(`Syncing rulesets for ${repo.owner}/${repo.repo}`)
 
               for (const ruleset of expectedRulesets) {
                 await github.rest.repos.createRepoRuleset({
@@ -298,10 +370,12 @@ jobs:
                   ...ruleset
                 })
 
-                console.log(`Synced ruleset ${ruleset.name} for ${repo.owner}/${repo.repo}`)
+                core.info(`Synced ruleset ${ruleset.name} for ${repo.owner}/${repo.repo}`)
               }
 
-              console.log(`Synced rulesets for ${repo.owner}/${repo.repo}`)
+              core.info(`Synced rulesets for ${repo.owner}/${repo.repo}`)
+
+              core.endGroup()
             }
 
   sync-webhooks:
@@ -321,19 +395,23 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            const expectedWebhooks = require('${{ github.workspace}}/settings/webhooks.js')
+            const expectedWebhooks = require('${{ github.workspace}}/config/webhooks.js')
+
+            core.info(`Config has ${expectedWebhooks.length} webhooks`)
 
             const result = []
 
             for (const repo of repos) {
-              console.log(`Finding webhooks for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Finding webhooks for ${repo.owner}/${repo.repo}`)
 
               const webhooks = await github.paginate(
                 github.rest.repos.listWebhooks,
                 { ...repo }
               )
 
-              console.log(`Found ${webhooks.length} webhooks for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${webhooks.length} webhooks for ${repo.owner}/${repo.repo}`)
 
               const webhooksToCreate = expectedWebhooks.filter(expectedWebhook => {
                 return !webhooks.find(webhook => {
@@ -341,7 +419,7 @@ jobs:
                 })
               })
 
-              console.log(`Found ${webhooksToCreate.length} webhooks to create for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${webhooksToCreate.length} webhooks to create for ${repo.owner}/${repo.repo}`)
 
               const webhooksToUpdate = expectedWebhooks.filter(expectedWebhook => {
                 return webhooks.find(webhook => {
@@ -349,44 +427,42 @@ jobs:
                 })
               })
 
-              console.log(`Found ${webhooksToUpdate.length} webhooks to update for ${repo.owner}/${repo.repo}`)
+              core.info(`Found ${webhooksToUpdate.length} webhooks to update for ${repo.owner}/${repo.repo}`)
 
-              if (webhooksToCreate.length > 0 || webhooksToUpdate.length > 0) {
-                result.push({
-                  repo,
-                  webhooksToCreate,
-                  webhooksToUpdate
-                })
-              }
-            }
-
-            console.log(`Found ${result.length} repositories with outdated webhooks`)
-
-            for (const repo of result) {
-              console.log(`Updating webhooks for ${repo.repo.owner}/${repo.repo.repo}`)
-
-              for (const webhook of repo.webhooksToCreate) {
+              for (const webhook of webhooksToCreate) {
                 await github.rest.repos.createWebhook({
                   ...repo.repo,
                   ...webhook
                 })
 
-                console.log(`Created webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
+                core.info(`Created webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
               }
 
-              for (const webhook of repo.webhooksToUpdate) {
+              for (const webhook of webhooksToUpdate) {
                 await github.rest.repos.updateWebhook({
                   ...repo.repo,
                   ...webhook
                 })
 
-                console.log(`Updated webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
+                core.info(`Updated webhook a webhook in ${repo.repo.owner}/${repo.repo.repo}`)
               }
+
+              core.info(`Synced webhooks for ${repo.owner}/${repo.repo}`)
+
+              core.endGroup()
             }
+
+            core.info(`Synced webhooks for ${repos.length} repositories`)
+
+            core.summary.addRaw(`Synced webhooks for ${repos.length} repositories`)
 
   sync-action-permissions:
     runs-on: ubuntu-latest
     needs: find-repos
+
+    env:
+      DEFAULT_WORKFLOW_PERMISSIONS: write
+      CAN_APPROVE_PULL_REQUEST_REVIEWS: true
 
     steps:
       - name: Checkout
@@ -399,19 +475,27 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Syncing action permissions for ${repos.length} repositories`)
+            core.info(`Syncing action permissions for ${repos.length} repositories`)
 
             for (const repo of repos) {
-              console.log(`Syncing action permissions for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Syncing action permissions for ${repo.owner}/${repo.repo}`)
 
               await github.rest.actions.setGithubActionsDefaultWorkflowPermissionsRepository({
                 ...repo,
-                default_workflow_permissions: 'write',
-                can_approve_pull_request_reviews: true
+                default_workflow_permissions: process.env.DEFAULT_WORKFLOW_PERMISSIONS,
+                can_approve_pull_requests: process.env.CAN_APPROVE_PULL_REQUEST_REVIEWS === 'true'
               })
 
-              console.log(`Synced action permissions for ${repo.owner}/${repo.repo}`)
+              core.info(`Synced action permissions for ${repo.owner}/${repo.repo}`)
+
+              core.endGroup()
             }
+
+            core.info(`Synced action permissions for ${repos.length} repositories`)
+
+            core.summary.addRaw(`Synced action permissions for ${repos.length} repositories`)
 
   verify-readme:
     runs-on: ubuntu-latest
@@ -430,28 +514,35 @@ jobs:
 
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            console.log(`Checking readme for ${repos.length} repositories`)
+            core.info(`Checking readme for ${repos.length} repositories`)
 
             io.mkdirP(`${{ github.workspace }}/tmp`)
 
             const result = []
 
             for (const repo of repos) {
-              console.log(`Checking readme for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Checking readme for ${repo.owner}/${repo.repo}`)
 
               await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}`, `${{ github.workspace }}/tmp/${repo.repo}`])
 
               const readme = fs.readdirSync(`${{ github.workspace }}/tmp/${repo.repo}`).filter(file => file.toLowerCase().startsWith('readme'))
 
               if (readme.length !== 0) {
-                console.log(`Readme found for ${repo.owner}/${repo.repo}`)
+                core.info(`Readme found for ${repo.owner}/${repo.repo}`)
+                core.endGroup()
                 continue
               }
 
-              console.log(`Readme not found for ${repo.owner}/${repo.repo}`)
+              core.info(`Readme not found for ${repo.owner}/${repo.repo}`)
 
               result.push(repo)
+
+              core.endGroup()
             }
+
+            core.info(`Found ${result.length} repositories without a readme`)
 
             return result
 
@@ -503,9 +594,13 @@ jobs:
           script: |
             const repos = ${{ steps.check-readme.outputs.result }}
 
-            console.log(`Creating issue for ${repos.length} repositories`)
+            core.info(`Creating issue for ${repos.length} repositories`)
 
             for (const repo of repos) {
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Creating issue for ${repo.owner}/${repo.repo}`)
+
               const issueAlreadyExists = await github.paginate(
                 github.rest.issues.listForRepo,
                 { ...repo, labels: process.env.ISSUE_LABEL }
@@ -516,7 +611,7 @@ jobs:
               })
 
               if (issueAlreadyExists) {
-                console.log(`Issue already exists for ${repo.owner}/${repo.repo}`)
+                core.info(`Issue already exists for ${repo.owner}/${repo.repo}`)
                 continue
               }
 
@@ -527,10 +622,16 @@ jobs:
                 labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
               })
 
-              console.log(`Created issue for ${repo.owner}/${repo.repo}`)
+              core.info(`Created issue for ${repo.owner}/${repo.repo}`)
 
-              console.log(`Issue: ${issue.data.html_url}`)
+              core.info(`Issue: ${issue.data.html_url}`)
+
+              core.endGroup()
             }
+
+            core.info(`Created issue for ${repos.length} repositories`)
+
+            core.summary.addRaw(`Created issue for ${repos.length} repositories`)
 
   verify-license:
     runs-on: ubuntu-latest
@@ -549,27 +650,31 @@ jobs:
 
             const fs = require('node:fs')
 
-            console.log(`Checking license for ${repos.length} repositories`)
+            core.info(`Checking license for ${repos.length} repositories`)
 
             io.mkdirP(`${{ github.workspace }}/tmp`)
 
             const result = []
 
             for (const repo of repos) {
-              console.log(`Checking license for ${repo.owner}/${repo.repo}`)
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
+              core.info(`Checking license for ${repo.owner}/${repo.repo}`)
 
               await exec.exec('git', ['clone', `https://github.com/${repo.owner}/${repo.repo}`, `${{ github.workspace }}/tmp/${repo.repo}`])
 
               const license = fs.readdirSync(`${{ github.workspace }}/tmp/${repo.repo}`).filter(file => file.toLowerCase().startsWith('license'))
 
               if (license.length !== 0) {
-                console.log(`License found for ${repo.owner}/${repo.repo}`)
+                core.info(`License found for ${repo.owner}/${repo.repo}`)
                 continue
               }
 
-              console.log(`License not found for ${repo.owner}/${repo.repo}`)
+              core.info(`License not found for ${repo.owner}/${repo.repo}`)
 
               result.push(repo)
+
+              core.endGroup()
             }
 
             return result
@@ -600,9 +705,11 @@ jobs:
           script: |
             const repos = ${{ steps.check-license.outputs.result }}
 
-            console.log(`Creating issue for ${repos.length} repositories`)
+            core.info(`Creating issue for ${repos.length} repositories`)
 
             for (const repo of repos) {
+              core.startGroup(`${repo.owner}/${repo.repo}`)
+
               const issueAlreadyExists = await github.paginate(
                 github.rest.issues.listForRepo,
                 { ...repo, labels: process.env.ISSUE_LABEL }
@@ -613,7 +720,7 @@ jobs:
               })
 
               if (issueAlreadyExists) {
-                console.log(`Issue already exists for ${repo.owner}/${repo.repo}`)
+                core.info(`Issue already exists for ${repo.owner}/${repo.repo}`)
                 continue
               }
 
@@ -624,7 +731,9 @@ jobs:
                 labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
               })
 
-              console.log(`Created issue for ${repo.owner}/${repo.repo}`)
+              core.info(`Created issue for ${repo.owner}/${repo.repo}`)
 
-              console.log(`Issue: ${issue.data.html_url}`)
+              core.info(`Issue: ${issue.data.html_url}`)
+
+              core.endGroup()
             }
