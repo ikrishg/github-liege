@@ -37,34 +37,6 @@
             }
           }
         ]
-    },
-    {
-      "name": "All Branches",
-      "target": "branch",
-      "bypass_actors": [
-        {
-          "actor_id": 5,
-          "actor_type": "RepositoryRole",
-          "bypass_mode": "always"
-        },
-        {
-          "actor_id": 2,
-          "actor_type": "RepositoryRole",
-          "bypass_mode": "always"
-        }
-      ],
-      "conditions": {
-        "ref_name": {
-          "include": ["~ALL"],
-          "exclude": ["~DEFAULT_BRANCH"]
-        }
-      },
-      "enforcement": "active",
-      "rules": [
-        {
-          "type": "required_linear_history"
-        }
-      ]
     }
   ]
 }
