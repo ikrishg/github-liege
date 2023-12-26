@@ -315,7 +315,7 @@ jobs:
       - name: Sync Rulesets
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
-          SKIP_REPOS: ""
+          SKIP_REPOS: "xkrishguptaa/notes"
         with:
           github-token: ${{ secrets.GH_OWNER_TOKEN }}
           script: |
@@ -334,17 +334,17 @@ jobs:
             for (const repo of repos) {
               core.startGroup(`${repo.owner}/${repo.repo}`)
 
-              core.info(`Finding rulesets for ${repo.owner}/${repo.repo}`)
-
-              const { data: rulesets } = await github.rest.repos.getRepoRulesets({
-                ...repo
-              })
-
               if (process.env.SKIP_REPOS.split(',').includes(`${repo.owner}/${repo.repo}`)) {
                 core.info(`Skipping ruleset syncing for ${repo.owner}/${repo.repo}`)
                 core.endGroup()
                 continue
               }
+
+              core.info(`Finding rulesets for ${repo.owner}/${repo.repo}`)
+
+              const { data: rulesets } = await github.rest.repos.getRepoRulesets({
+                ...repo
+              })
 
               if (rulesets.length > 0) {
                 core.info(`Deleting rulesets for ${repo.owner}/${repo.repo}`)
