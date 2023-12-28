@@ -144,7 +144,7 @@ jobs:
 
               for (const label of labelsToDelete) {
                 await github.rest.issues.deleteLabel({
-                  ...repo.repo,
+                  ...repo,
                   name: label.name
                 })
 
@@ -155,7 +155,7 @@ jobs:
 
               for (const label of labelsToCreate) {
                 await github.rest.issues.createLabel({
-                  ...repo.repo,
+                  ...repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
@@ -167,7 +167,7 @@ jobs:
 
               for (const label of labelsToUpdate) {
                 await github.rest.issues.updateLabel({
-                  ...repo.repo,
+                  ...repo,
                   ...label,
                   color: label.color.replace('#', '')
                 })
@@ -430,7 +430,7 @@ jobs:
 
               for (const webhook of webhooksToCreate) {
                 await github.rest.repos.createWebhook({
-                  ...repo.repo,
+                  ...repo,
                   ...webhook
                 })
 
@@ -439,7 +439,7 @@ jobs:
 
               for (const webhook of webhooksToUpdate) {
                 await github.rest.repos.updateWebhook({
-                  ...repo.repo,
+                  ...repo,
                   ...webhook
                 })
 
