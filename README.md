@@ -1,3 +1,5 @@
+> Out of use as it is deemed to be repetitive waste of GitHub API calls and resources for repositories that are once set to be configured. Might convert this to a script to be run on creation of repositories later.
+
 <div align="center">
   <img src="https://github.com/github.png" height="100px" width="100px" style="border-radius: 100%;" />
   <br />
