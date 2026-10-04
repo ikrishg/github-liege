@@ -1,14 +1,11 @@
 {
-  "name": "github-liege-placeholder",
+  "name": "github-liege",
   "version": "0.0.0",
   "private": true,
-  "description": "Apply named GitHub repository configurations (npm package name TBD)",
+  "description": "Web UI to apply shared GitHub repository configurations",
   "type": "module",
-  "bin": {
-    "github-liege": "./bin/github-liege.js"
-  },
   "scripts": {
-    "liege": "node ./bin/github-liege.js",
+    "start": "node server.js",
     "test": "node --test test/*.test.js"
   },
   "engines": {
@@ -16,7 +13,11 @@
   },
   "dependencies": {
     "@octokit/rest": "^21.1.1",
-    "commander": "^13.1.0",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
     "fast-deep-equal": "^3.1.3"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.0"
   }
 }

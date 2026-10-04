@@ -1,84 +1,56 @@
 # github-liege
 
-Named GitHub repository configurations you can apply on demand. Each configuration is a folder under `configs/` (for example `configs/default/`) with labels, merge settings, and a default-branch ruleset.
+Small web UI for applying **shared, named GitHub repository configurations**. Anyone signs in with their own GitHub account and applies a config only to repositories they can administer. The app reads live GitHub settings, diffs them against the config, and patches only what differs.
 
-The old daily GitHub Actions sync lives on the [`v1.1.2`](https://github.com/ikrishg/github-liege/releases/tag/v1.1.2) tag. This repository is the command-line replacement: no schedule, no webhook fan-out, and no cloning repositories to nag about README or LICENSE files.
+The old daily GitHub Actions sync is preserved on the [`v1.1.2`](https://github.com/ikrishg/github-liege/releases/tag/v1.1.2) tag. There is no npm package and nothing is published to npm.
 
 Maintained by [Krish Gupta](https://github.com/ikrishg).
 
-## Requirements
+## What each configuration contains
 
-- Node.js 20+
-- A GitHub token with permission to manage settings on the target repositories (`GITHUB_TOKEN` or `GH_TOKEN`)
+Under `configs/<name>/`:
 
-## Install (local)
+- `labels.json` — create or update labels by name (extra labels are kept unless the user opts in on the review screen)
+- `merge.json` — squash and rebase on, merge commits off, delete branch on merge
+- `ruleset.json` — one default-branch ruleset, updated **in place** by name (linear history, PR required, repository admin can bypass review)
+
+Exactly one config can be marked **default**; that is what **new repositories** receive from the Repos screen.
+
+## Run locally
 
 ```bash
 npm install
+npm start
 ```
 
-The npm package name is not finalized yet; `package.json` uses a placeholder until publishing is decided.
+Open `http://localhost:3000` (or set `PORT`).
 
-## Commands
+### GitHub OAuth app (required for real sign-in)
 
-### Apply a named config to specific repositories
+Create a GitHub OAuth App and set these environment variables on the server. **Do not commit real values.**
 
-Reads live GitHub settings, compares them to the config, and patches only what differs. If everything already matches, nothing is written.
+| Variable | Purpose |
+| --- | --- |
+| `GITHUB_OAUTH_CLIENT_ID` | OAuth App client ID |
+| `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App client secret |
+| `GITHUB_OAUTH_CALLBACK_URL` | Callback URL registered on the app (e.g. `http://localhost:3000/auth/github/callback`) |
+| `SESSION_SECRET` | Secret used to sign session cookies |
 
-```bash
-GITHUB_TOKEN=ghp_... npm run liege -- apply default ikrishg/github-liege
-```
+Optional:
 
-Equivalent using the bin entry after `npm install`:
+| Variable | Purpose |
+| --- | --- |
+| `PORT` | HTTP port (default `3000`) |
+| `GITHUB_LIEGE_TEST_AUTH` | Set to `1` to enable `POST /api/auth/test-login` for local/tests (no GitHub API access) |
 
-```bash
-GITHUB_TOKEN=ghp_... npx --no-install github-liege apply default ikrishg/github-liege
-```
+OAuth scope requested: `read:user repo` (administer repositories the user can change).
 
-Optional: remove labels that are not defined in the config (default is to leave extra labels alone):
+### Screens
 
-```bash
-npm run liege -- apply default ikrishg/my-repo --delete-extra-labels
-```
-
-### Apply `default` to repositories created since the last run
-
-Tracks the last successful scan in `~/.config/github-liege/state.json` (override with `GITHUB_LIEGE_STATE_FILE`). Repositories created after that timestamp get the `default` config.
-
-```bash
-GITHUB_TOKEN=ghp_... npm run liege -- apply-new --owner ikrishg
-```
-
-Preview without changing GitHub or updating state:
-
-```bash
-npm run liege -- apply-new --owner ikrishg --dry-run
-```
-
-### List configurations
-
-```bash
-npm run liege -- list-configs
-```
-
-## Configuration layout
-
-```
-configs/
-  default/
-    labels.json    # issue labels (create or update by name)
-    merge.json     # squash/rebase on, merge commits off, delete branch on merge
-    ruleset.json   # single "Default Branch" ruleset (updated in place by name)
-```
-
-Add more folders under `configs/` for other named profiles. `default` is what `apply-new` uses unless you pass `--config`.
-
-### Default ruleset behavior
-
-- Linear history on the default branch
-- Pull requests required with one approving review
-- Repository **admin** role can bypass rules (so an owner acting as admin is not blocked by self-approval limits on agent-opened PRs)
-- Other rulesets on the repository are left unchanged
+1. **Repos** — home after login; only admin-capable repos; Apply per row; **Apply default to new repos**
+2. **Configs** — shared named sets; edit on row; mark one as default
+3. **Apply review** — config + repos + planned writes; optional delete-extra-labels; confirm before any write
+4. **Result** — per-repo success or GitHub error (partial applies stay visible)
 
 ## Development
 
