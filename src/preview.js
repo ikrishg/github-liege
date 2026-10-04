@@ -4,6 +4,10 @@ import {
   rulesetMatches,
 } from "./normalize.js";
 import { parseRepoSlug } from "./github.js";
+import {
+  findRepositoryRulesetByName,
+  listRepositoryRulesets,
+} from "./rulesets.js";
 
 /**
  * @param {import('@octokit/rest').Octokit} octokit
@@ -47,11 +51,8 @@ export async function previewConfigForRepo(octokit, repoSlug, config, options = 
     changes.push({ kind: "merge", action: "update", fields: mergePatch });
   }
 
-  const { data: rulesets } = await octokit.rest.repos.getRepoRulesets({
-    owner,
-    repo,
-  });
-  const existing = rulesets.find((r) => r.name === config.ruleset.name);
+  const rulesets = await listRepositoryRulesets(octokit, owner, repo);
+  const existing = findRepositoryRulesetByName(rulesets, config.ruleset.name);
   if (!existing) {
     changes.push({
       kind: "ruleset",

@@ -4,10 +4,11 @@ import session from "express-session";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyConfigToRepo } from "./src/apply.js";
+import { configRevision } from "./src/configRevision.js";
 import { loadNamedConfig, listConfigNames, saveNamedConfig } from "./src/config.js";
 import { createOctokit, listAdminRepos, listNewAdminRepos } from "./src/github.js";
 import { describeChange, previewConfigForRepo } from "./src/preview.js";
-import { readAppStore, writeAppStore } from "./src/store.js";
+import { getLastNewRepoScanAt, readAppStore, writeAppStore } from "./src/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, "public");
@@ -32,8 +33,22 @@ function sessionSecret() {
   return process.env.SESSION_SECRET ?? "dev-only-insecure-session-secret";
 }
 
+function assertConfigRevisionMatches(config, expectedRevision) {
+  const actual = configRevision(config);
+  if (!expectedRevision || actual !== expectedRevision) {
+    const err = new Error("Configuration changed since preview. Open review again.");
+    err.statusCode = 409;
+    throw err;
+  }
+}
+
 export function createApp() {
   const app = express();
+
+  if (process.env.NODE_ENV === "production" || process.env.TRUST_PROXY === "1") {
+    app.set("trust proxy", 1);
+  }
+
   app.use(express.json({ limit: "2mb" }));
   app.use(
     session({
@@ -112,40 +127,62 @@ export function createApp() {
     res.redirect(`https://github.com/login/oauth/authorize?${params}`);
   });
 
-  app.get("/auth/github/callback", async (req, res) => {
-    if (!oauthConfigured()) {
-      res.status(503).send("GitHub OAuth is not configured.");
-      return;
+  app.get("/auth/github/callback", async (req, res, next) => {
+    try {
+      if (!oauthConfigured()) {
+        res.status(503).send("GitHub OAuth is not configured.");
+        return;
+      }
+      const { code, state } = req.query;
+      if (!code || state !== req.session.oauthState) {
+        res.status(400).send("Invalid OAuth state.");
+        return;
+      }
+
+      const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          client_id: requiredEnv("GITHUB_OAUTH_CLIENT_ID"),
+          client_secret: requiredEnv("GITHUB_OAUTH_CLIENT_SECRET"),
+          code,
+          redirect_uri: requiredEnv("GITHUB_OAUTH_CALLBACK_URL"),
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        res.status(502).send("GitHub token exchange failed.");
+        return;
+      }
+
+      const tokenJson = await tokenRes.json();
+      if (!tokenJson.access_token) {
+        res.status(400).send("Could not complete GitHub sign-in.");
+        return;
+      }
+
+      const octokit = createOctokit(tokenJson.access_token);
+      const { data: user } = await octokit.rest.users.getAuthenticated();
+
+      await new Promise((resolve, reject) => {
+        req.session.regenerate((err) => (err ? reject(err) : resolve()));
+      });
+
+      req.session.accessToken = tokenJson.access_token;
+      req.session.user = { login: user.login, name: user.name ?? user.login };
+      delete req.session.oauthState;
+
+      await new Promise((resolve, reject) => {
+        req.session.save((err) => (err ? reject(err) : resolve()));
+      });
+
+      res.redirect("/#/repos");
+    } catch (err) {
+      next(err);
     }
-    const { code, state } = req.query;
-    if (!code || state !== req.session.oauthState) {
-      res.status(400).send("Invalid OAuth state.");
-      return;
-    }
-    const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        client_id: requiredEnv("GITHUB_OAUTH_CLIENT_ID"),
-        client_secret: requiredEnv("GITHUB_OAUTH_CLIENT_SECRET"),
-        code,
-        redirect_uri: requiredEnv("GITHUB_OAUTH_CALLBACK_URL"),
-      }),
-    });
-    const tokenJson = await tokenRes.json();
-    if (!tokenJson.access_token) {
-      res.status(400).send("Could not complete GitHub sign-in.");
-      return;
-    }
-    const octokit = createOctokit(tokenJson.access_token);
-    const { data: user } = await octokit.rest.users.getAuthenticated();
-    req.session.accessToken = tokenJson.access_token;
-    req.session.user = { login: user.login, name: user.name ?? user.login };
-    delete req.session.oauthState;
-    res.redirect("/#/repos");
   });
 
   app.post("/api/auth/logout", (req, res) => {
@@ -158,6 +195,7 @@ export function createApp() {
     try {
       const octokit = createOctokit(getAccessToken(req));
       const store = await readAppStore();
+      const login = req.session.user.login;
       const repos = await listAdminRepos(octokit);
       res.json({
         repos: repos.map((repo) => ({
@@ -166,7 +204,7 @@ export function createApp() {
           createdAt: repo.created_at,
         })),
         defaultConfigName: store.defaultConfigName,
-        lastNewRepoScanAt: store.lastNewRepoScanAt,
+        lastNewRepoScanAt: getLastNewRepoScanAt(store, login),
       });
     } catch (err) {
       next(err);
@@ -202,6 +240,7 @@ export function createApp() {
       res.json({
         ...config,
         isDefault: store.defaultConfigName === config.name,
+        revision: configRevision(config),
       });
     } catch (err) {
       next(err);
@@ -240,6 +279,7 @@ export function createApp() {
         return;
       }
       const config = await loadNamedConfig(configName);
+      const revision = configRevision(config);
       const octokit = createOctokit(getAccessToken(req));
       const adminRepos = new Set(
         (await listAdminRepos(octokit)).map((r) => r.full_name),
@@ -258,7 +298,12 @@ export function createApp() {
           descriptions: preview.changes.map(describeChange),
         });
       }
-      res.json({ configName, deleteExtraLabels: Boolean(deleteExtraLabels), previews });
+      res.json({
+        configName,
+        configRevision: revision,
+        deleteExtraLabels: Boolean(deleteExtraLabels),
+        previews,
+      });
     } catch (err) {
       next(err);
     }
@@ -266,20 +311,21 @@ export function createApp() {
 
   app.post("/api/apply/confirm", requireUser, requireToken, async (req, res, next) => {
     try {
-      const { configName, repos, deleteExtraLabels } = req.body;
+      const { configName, repos, deleteExtraLabels, configRevision: expectedRevision } =
+        req.body;
       if (!configName || !Array.isArray(repos) || repos.length === 0) {
         res.status(400).json({ error: "configName and repos are required" });
         return;
       }
       const config = await loadNamedConfig(configName);
+      assertConfigRevisionMatches(config, expectedRevision);
       const octokit = createOctokit(getAccessToken(req));
       const adminRepos = new Set(
         (await listAdminRepos(octokit)).map((r) => r.full_name),
       );
 
       const results = [];
-      const store = await readAppStore();
-      const appliedConfigs = { ...store.appliedConfigs };
+      const appliedConfigsDelta = {};
 
       for (const slug of repos) {
         if (!adminRepos.has(slug)) {
@@ -294,7 +340,7 @@ export function createApp() {
           const summary = await applyConfigToRepo(octokit, slug, config, {
             deleteExtraLabels: Boolean(deleteExtraLabels),
           });
-          appliedConfigs[slug] = configName;
+          appliedConfigsDelta[slug] = configName;
           results.push({ repo: slug, ok: true, summary });
         } catch (err) {
           results.push({
@@ -305,8 +351,10 @@ export function createApp() {
         }
       }
 
-      await writeAppStore({ appliedConfigs });
-      res.json({ results });
+      if (Object.keys(appliedConfigsDelta).length > 0) {
+        await writeAppStore({ appliedConfigsDelta });
+      }
+      res.json({ configName, results });
     } catch (err) {
       next(err);
     }
@@ -315,10 +363,13 @@ export function createApp() {
   app.post("/api/apply-new/preview", requireUser, requireToken, async (req, res, next) => {
     try {
       const store = await readAppStore();
+      const login = req.session.user.login;
       const configName = store.defaultConfigName;
       const config = await loadNamedConfig(configName);
+      const revision = configRevision(config);
+      const since = getLastNewRepoScanAt(store, login);
       const octokit = createOctokit(getAccessToken(req));
-      const candidates = await listNewAdminRepos(octokit, store.lastNewRepoScanAt);
+      const candidates = await listNewAdminRepos(octokit, since);
       const previews = [];
       for (const repo of candidates) {
         const preview = await previewConfigForRepo(octokit, repo.full_name, config, {
@@ -331,7 +382,8 @@ export function createApp() {
       }
       res.json({
         configName,
-        since: store.lastNewRepoScanAt,
+        configRevision: revision,
+        since,
         repos: candidates.map((r) => r.full_name),
         previews,
       });
@@ -342,21 +394,25 @@ export function createApp() {
 
   app.post("/api/apply-new/confirm", requireUser, requireToken, async (req, res, next) => {
     try {
+      const { configRevision: expectedRevision } = req.body ?? {};
       const store = await readAppStore();
+      const login = req.session.user.login;
       const configName = store.defaultConfigName;
       const config = await loadNamedConfig(configName);
+      assertConfigRevisionMatches(config, expectedRevision);
+      const since = getLastNewRepoScanAt(store, login);
       const octokit = createOctokit(getAccessToken(req));
-      const candidates = await listNewAdminRepos(octokit, store.lastNewRepoScanAt);
+      const candidates = await listNewAdminRepos(octokit, since);
       const runStartedAt = new Date().toISOString();
       const results = [];
-      const appliedConfigs = { ...store.appliedConfigs };
+      const appliedConfigsDelta = {};
 
       for (const repo of candidates) {
         try {
           const summary = await applyConfigToRepo(octokit, repo.full_name, config, {
             deleteExtraLabels: false,
           });
-          appliedConfigs[repo.full_name] = configName;
+          appliedConfigsDelta[repo.full_name] = configName;
           results.push({ repo: repo.full_name, ok: true, summary });
         } catch (err) {
           results.push({
@@ -367,10 +423,14 @@ export function createApp() {
         }
       }
 
-      await writeAppStore({
-        lastNewRepoScanAt: runStartedAt,
-        appliedConfigs,
-      });
+      const allSucceeded = results.length === 0 || results.every((r) => r.ok);
+      const storeUpdate = { appliedConfigsDelta };
+      if (allSucceeded) {
+        storeUpdate.lastNewRepoScanAtForUser = { login, at: runStartedAt };
+      }
+      if (Object.keys(appliedConfigsDelta).length > 0 || allSucceeded) {
+        await writeAppStore(storeUpdate);
+      }
 
       res.json({ configName, results });
     } catch (err) {
@@ -380,7 +440,8 @@ export function createApp() {
 
   app.use((err, _req, res, _next) => {
     console.error(err);
-    res.status(500).json({
+    const status = err && typeof err === "object" && "statusCode" in err ? err.statusCode : 500;
+    res.status(status).json({
       error: err instanceof Error ? err.message : "Internal server error",
     });
   });
