@@ -35,6 +35,7 @@ Create a GitHub OAuth App and set these environment variables on the server. **D
 | `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App client secret |
 | `GITHUB_OAUTH_CALLBACK_URL` | Callback URL registered on the app (e.g. `http://localhost:3000/auth/github/callback`) |
 | `SESSION_SECRET` | Secret used to sign session cookies |
+| `TRUST_PROXY` | Set to `1` when running behind a TLS-terminating reverse proxy (with `NODE_ENV=production`, enables secure session cookies) |
 
 Optional:
 
