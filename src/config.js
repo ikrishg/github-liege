@@ -40,3 +40,25 @@ export async function loadNamedConfig(name) {
     ruleset,
   };
 }
+
+export async function saveNamedConfig(name, payload) {
+  const dir = path.join(configsRoot(), name);
+  await fs.mkdir(dir, { recursive: true });
+
+  const labels = { labels: payload.labels };
+  await fs.writeFile(
+    path.join(dir, "labels.json"),
+    `${JSON.stringify(labels, null, 2)}\n`,
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(dir, "merge.json"),
+    `${JSON.stringify(payload.merge, null, 2)}\n`,
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(dir, "ruleset.json"),
+    `${JSON.stringify(payload.ruleset, null, 2)}\n`,
+    "utf8",
+  );
+}
