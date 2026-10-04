@@ -1,2 +1,3 @@
-tmp/
-temp/
+node_modules/
+dist/
+.liege-state.json

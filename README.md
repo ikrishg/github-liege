@@ -1,72 +1,91 @@
-> Out of use as it is deemed to be repetitive waste of GitHub API calls and resources for repositories that are once set to be configured. Might convert this to a script to be run on creation of repositories later.
+# github-liege
 
-<div align="center">
-  <img src="https://github.com/github.png" height="100px" width="100px" style="border-radius: 100%;" />
-  <br />
-  <h1>GitHub Config</h1>
-  <p>GitHub Config for all <a href="https://github.com/xkrishguptaa">@xkrishguptaa</a> Repositories 🍭</p>
-</div>
+Named GitHub repository configurations you can apply on demand. Each configuration is a folder under `configs/` (for example `configs/default/`) with labels, merge settings, and a default-branch ruleset.
 
-## ❓ Why `config-github`?
+The old daily GitHub Actions sync lives on the [`v1.1.2`](https://github.com/ikrishg/github-liege/releases/tag/v1.1.2) tag. This repository is the command-line replacement: no schedule, no webhook fan-out, and no cloning repositories to nag about README or LICENSE files.
 
-- It is hard to maintain consistency across all repositories
-- This will sync all the repository settings
-- It supports `labels`, `rulesets`, `webhooks` and more...
+Maintained by [Krish Gupta](https://github.com/ikrishg).
 
-## 📦 Usage
+## Requirements
 
-The GitHub Action [sync.yml](https://github.com/xkrishguptaa/config-github/actions/workflows/sync.yml) will run every day and sync the repository settings with the config.
+- Node.js 20+
+- A GitHub token with permission to manage settings on the target repositories (`GITHUB_TOKEN` or `GH_TOKEN`)
 
-## ✨ Features
+## Install (local)
 
-### Labels
+```bash
+npm install
+```
 
-- Finds labels from the config in `config/labels.json` and creates them if not found, else updates them. It will also delete the labels which are not in the config.
-- It will also sync the colors of the labels.
-- The key of the label for syncing is the `name` of the label.
+The npm package name is not finalized yet; `package.json` uses a placeholder until publishing is decided.
 
-### Disable Projects (if unused)
+## Commands
 
-- If the repository has projects enabled, it will disable them if they are not used.
+### Apply a named config to specific repositories
 
-### Merge Strategies
+Reads live GitHub settings, compares them to the config, and patches only what differs. If everything already matches, nothing is written.
 
-- It will set the merge strategy to `squash` and `rebase` for the repository.
-- Merge commits are not allowed.
-- Auto-merge is enabled for the repository.
-- Branches are deleted after merging.
-- Web commit signing is required.
+```bash
+GITHUB_TOKEN=ghp_... npm run liege -- apply default ikrishg/github-liege
+```
 
-### Rulesets
+Equivalent using the bin entry after `npm install`:
 
-- First, It will also delete all the rulesets.
-- Then it will create the rulesets from the config in `config/rulesets.json`.
+```bash
+GITHUB_TOKEN=ghp_... npx --no-install github-liege apply default ikrishg/github-liege
+```
 
-### Webhooks
+Optional: remove labels that are not defined in the config (default is to leave extra labels alone):
 
-- Webhooks are only `CREATED` and `UPDATED`.
-- The key for syncing the webhooks is the `url` of the webhook.
-- The config is in `config/webhooks.json`.
+```bash
+npm run liege -- apply default ikrishg/my-repo --delete-extra-labels
+```
 
-### Action Permissions
+### Apply `default` to repositories created since the last run
 
-- It will set the permissions for the `actions` to `write` for the repositorys.
-- It will allow the `actions` to access the approve pull requests.
+Tracks the last successful scan in `~/.config/github-liege/state.json` (override with `GITHUB_LIEGE_STATE_FILE`). Repositories created after that timestamp get the `default` config.
 
-### Readme
+```bash
+GITHUB_TOKEN=ghp_... npm run liege -- apply-new --owner ikrishg
+```
 
-- It will check if the repository has a `README.md` file or not.
-- If not, it will make a issue and ask the user to add a `README.md` file.
+Preview without changing GitHub or updating state:
 
-It will not create duplicate issues for the `README.md` file if the issue is already open and the title of the issue hasn't changed.
+```bash
+npm run liege -- apply-new --owner ikrishg --dry-run
+```
 
-### License
+### List configurations
 
-- It will check if the repository has a `LICENSE` file or not.
-- If not, it will make a issue and ask the user to add a `LICENSE` file.
+```bash
+npm run liege -- list-configs
+```
 
-It will not create duplicate issues for the `LICENSE` file if the issue is already open and the title of the issue hasn't changed.
+## Configuration layout
 
-## 📝 License
+```
+configs/
+  default/
+    labels.json    # issue labels (create or update by name)
+    merge.json     # squash/rebase on, merge commits off, delete branch on merge
+    ruleset.json   # single "Default Branch" ruleset (updated in place by name)
+```
 
-This project is licensed under the GNU-GPLv3.0+ license. Read the license file for more details
+Add more folders under `configs/` for other named profiles. `default` is what `apply-new` uses unless you pass `--config`.
+
+### Default ruleset behavior
+
+- Linear history on the default branch
+- Pull requests required with one approving review
+- Repository **admin** role can bypass rules (so an owner acting as admin is not blocked by self-approval limits on agent-opened PRs)
+- Other rulesets on the repository are left unchanged
+
+## Development
+
+```bash
+npm test
+```
+
+## License
+
+GNU GPL-3.0 or later. See [LICENSE](LICENSE).
