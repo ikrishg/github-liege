@@ -1,13 +1,10 @@
 import { Octokit } from "@octokit/rest";
 
-export function createOctokit() {
-  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
-  if (!token) {
-    throw new Error(
-      "Set GITHUB_TOKEN or GH_TOKEN with permission to manage the target repositories.",
-    );
+export function createOctokit(accessToken) {
+  if (!accessToken) {
+    throw new Error("Missing GitHub access token.");
   }
-  return new Octokit({ auth: token });
+  return new Octokit({ auth: accessToken });
 }
 
 export function parseRepoSlug(slug) {
@@ -19,9 +16,27 @@ export function parseRepoSlug(slug) {
   return { owner: parts[0], repo: parts[1] };
 }
 
-export async function paginateReposForUser(octokit, username) {
-  return octokit.paginate(octokit.rest.repos.listForUser, {
-    username,
+export async function listAdminRepos(octokit) {
+  const repos = await octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
+    affiliation: "owner,collaborator,organization_member",
     per_page: 100,
+  });
+
+  return repos.filter((repo) => {
+    if (repo.archived || repo.disabled) {
+      return false;
+    }
+    return repo.permissions?.admin === true;
+  });
+}
+
+export async function listNewAdminRepos(octokit, sinceIso) {
+  const since = sinceIso ? new Date(sinceIso) : new Date(0);
+  const repos = await listAdminRepos(octokit);
+  return repos.filter((repo) => {
+    if (repo.fork) {
+      return false;
+    }
+    return new Date(repo.created_at) > since;
   });
 }

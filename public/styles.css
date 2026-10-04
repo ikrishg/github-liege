@@ -1,0 +1,173 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f1419;
+  --panel: #1a2332;
+  --text: #e7ecf3;
+  --muted: #9aa7b8;
+  --accent: #3d8bfd;
+  --danger: #f85149;
+  --ok: #3fb950;
+  --border: #2d3a4d;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.site-header nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+
+.site-header a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.site-header a.active {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.brand {
+  font-weight: 700;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 1.5rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.6rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+button,
+.button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+button.danger {
+  background: var(--danger);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+label.checkbox {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 1rem 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #243044;
+  font-size: 0.85rem;
+}
+
+.badge.default {
+  background: #1f4d2e;
+  color: #aff0b5;
+}
+
+.result-ok {
+  color: var(--ok);
+}
+
+.result-fail {
+  color: var(--danger);
+}
+
+textarea.json-edit {
+  width: 100%;
+  min-height: 8rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  background: #0b1018;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+}
+
+.stack {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
