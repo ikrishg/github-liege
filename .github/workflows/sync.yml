@@ -189,87 +189,17 @@ jobs:
 
             core.summary.addRaw(`Updated ${updatedLabels} labels, created ${createdLabels} labels, and deleted ${deletedLabels} labels`)
 
-  disable-projects-if-unused:
-    runs-on: ubuntu-latest
-    needs: find-repos
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Find Projects to Disable
-        id: find-projects-to-disable
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          script: |
-            const repos = ${{ needs.find-repos.outputs.repos }}.filter(repo => repo.has_projects)
-
-            core.info(`Finding projects for ${repos.length} repositories`)
-
-            const result = []
-
-            for (const repo of repos) {
-              core.startGroup(`${repo.owner}/${repo.repo}`)
-
-              core.info(`Finding projects for ${repo.owner}/${repo.repo}`)
-
-              const projects = await github.paginate(
-                github.rest.projects.listForRepo,
-                { ...repo }
-              )
-
-              core.info(`Found ${projects.length} projects for ${repo.owner}/${repo.repo}`)
-
-              core.debug(JSON.stringify(projects, null, 2))
-
-              if (projects.length === 0) {
-                result.push(repo)
-              }
-
-              core.endGroup()
-            }
-
-            core.summary.addRaw(`Found ${result.length} repositories with unused project boards`)
-
-            return result
-
-      - name: Disable Projects
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          github-token: ${{ secrets.GH_OWNER_TOKEN }}
-          script: |
-            const repos = ${{ steps.find-projects-to-disable.outputs.result }}
-
-            core.info(`Disabling projects for ${repos.length} repositories`)
-
-            for (const repo of repos) {
-              core.startGroup(`${repo.owner}/${repo.repo}`)
-
-              core.info(`Disabling projects for ${repo.owner}/${repo.repo}`)
-
-              await github.rest.repos.update({
-                ...repo,
-                has_projects: false
-              })
-
-              core.info(`Disabled projects for ${repo.owner}/${repo.repo}`)
-
-              core.endGroup()
-            }
-
-            core.summary.addRaw(`Disabled projects for ${repos.length} repositories`)
-
   merge-strategies:
     runs-on: ubuntu-latest
     needs: find-repos
 
     env:
-      ALLOW_SQUASH_MERGE: true
+      ALLOW_SQUASH_MERGE: false
       ALLOW_REBASE_MERGE: true
       ALLOW_MERGE_COMMIT: false
       AUTOMERGE_ENABLED: false
       DELETE_BRANCH_ON_MERGE: true
-      REQUIRE_WEB_COMMIT_SIGNATURE: true
+      REQUIRE_WEB_COMMIT_SIGNATURE: false
 
     steps:
       - name: Checkout
