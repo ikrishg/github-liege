@@ -1,6 +1,6 @@
 {
   "name": "github-liege",
-  "version": "0.0.0",
+  "version": "1.1.2",
   "private": true,
   "description": "Web UI to apply shared GitHub repository configurations",
   "type": "module",
