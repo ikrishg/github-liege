@@ -58,7 +58,8 @@ jobs:
               return {
                 owner: repo.owner.login,
                 repo: repo.name,
-                has_projects: repo.has_projects
+                has_projects: repo.has_projects,
+                has_issues: repo.has_issues
               }
             });
 
@@ -324,7 +325,7 @@ jobs:
           script: |
             const repos = ${{ needs.find-repos.outputs.repos }}
 
-            const expectedWebhooks = require('${{ github.workspace}}/config/webhooks.js')
+            const expectedWebhooks = require('${{ github.workspace}}/config/webhooks.cjs')
 
             core.info(`Config has ${expectedWebhooks.length} webhooks`)
 
@@ -544,8 +545,10 @@ jobs:
                 continue
               }
 
+              const { has_projects, has_issues, ...target } = repo
+
               const issue = await github.rest.issues.create({
-                ...repo,
+                ...target,
                 title: process.env.ISSUE_TITLE,
                 body: process.env.ISSUE_BODY,
                 labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
@@ -637,6 +640,11 @@ jobs:
             core.info(`Creating issue for ${repos.length} repositories`)
 
             for (const repo of repos) {
+              if (!repo.has_issues) {
+                core.info(`Issues are disabled for ${repo.owner}/${repo.repo}, skipping`)
+                continue
+              }
+
               core.startGroup(`${repo.owner}/${repo.repo}`)
 
               const issueAlreadyExists = await github.paginate(
@@ -653,8 +661,10 @@ jobs:
                 continue
               }
 
+              const { has_projects, has_issues, ...target } = repo
+
               const issue = await github.rest.issues.create({
-                ...repo,
+                ...target,
                 title: process.env.ISSUE_TITLE,
                 body: process.env.ISSUE_BODY,
                 labels: process.env.ISSUE_LABEL.split(',').map(label => label.trim())
